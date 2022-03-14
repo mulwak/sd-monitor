@@ -24,7 +24,7 @@
 ; --- アドレス定義 ---
 
 ; UART
-UARTBASE = $4000
+UARTBASE = $E000
 UART_RX = UARTBASE
 UART_TX = UARTBASE
 UART_STATUS = UARTBASE+1
@@ -32,12 +32,18 @@ UART_COMMAND = UARTBASE+2
 UART_CONTROL = UARTBASE+3
 
 ; VIA
-VIABASE = $4800
+VIABASE = $E200
 PORTB = VIABASE
 PORTA = VIABASE+1
 DDRB = VIABASE+2
 DDRA = VIABASE+3
 IFR = VIABASE+$D
+
+; YMZ
+YMZBASE = $E400
+
+; CRTC
+CRTCBASE = $E600
 
 
 ; アプリケーションRAM領域（ゼロページ）
@@ -85,6 +91,9 @@ LOAD_BYTCNT = MON_RAMBASE+15
 T1_IRQ_VEC = MON_RAMBASE+16 ; 2byte アプリケーションが用意するタイマ割り込み処理のベクタ
 UART_IRQ_VEC = MON_RAMBASE+18 ; 2byte アプリケーションによってとび先を変えられる、UART割り込み処理のベクタ
 
+; アプリケーションRAM領域
+APP_RAMBASE = $0400
+
 ; --- 定数定義 ---
 ; UART COMMAND
 ; PMC1/PMC0/PME/REM/TIC1/TIC0/IRD/DTR
@@ -111,7 +120,8 @@ XOFF = $13
 
 ; --- リセット ---
 
-  .ORG $8000
+  .ORG $E000
+  .ORG $F000
 
 RESET:
 
@@ -153,11 +163,11 @@ RESET:
   STA UART_IRQ_VEC+1
 
 ; --- スタックの初期化 --
-  LDX #$FF
+  LDX #STACK
   TXS
-  LDA #$20
+  LDA #>APP_RAMBASE
   PHA       ; アプリケーション開始ベクタ上位
-  LDA #$00
+  LDA #<APP_RAMBASE
   PHA       ; アプリケーション開始ベクタ下位
   PHA       ; フラグレジスタ初期値
   TSX       ; たぶん保持しとくべきSPLは$FF-3
@@ -694,8 +704,7 @@ PRTREG:  ; print contents of stack
 NEWLINE: .ASCIIZ $A,"*"
 MESSAGE: .ASCIIZ "SD-Monitor  V.02","                        ","      for FxT-65"
 
-  ;.ORG $FFFA
-  .ORG $9FFA
+  .ORG $FFFA
   .WORD NMI
   .WORD RESET
   .WORD IRQ
