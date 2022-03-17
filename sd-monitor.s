@@ -66,6 +66,7 @@ ADDR_INDEX_L = MON_ZP_RAMBASE-1  ; 各所で使うので専用
 ZP_INPUT_BF_WR_P = MON_ZP_RAMBASE-2
 ZP_INPUT_BF_RD_P = MON_ZP_RAMBASE-3
 ZP_INPUT_BF_LEN = MON_ZP_RAMBASE-4
+ECHO_F = MON_ZP_RAMBASE-5     ; エコーフラグ
 
 ; UART受信用リングバッファ
 INPUT_BF_BASE = $0200
@@ -120,7 +121,7 @@ XOFF = $13
 
 ; --- リセット ---
 
-  .ORG $E000
+  .ORG $E000  ; 256kbit書き込み機で64kbromを焼く場合の配慮
   .ORG $F000
 
 RESET:
@@ -173,6 +174,10 @@ RESET:
   TSX       ; たぶん保持しとくべきSPLは$FF-3
   STX SP_SAVE
 
+; --- 設定フラグセット
+  LDA #%10000000
+  STA ECHO_F
+
   CLD
   CLI
 
@@ -194,6 +199,8 @@ CTRL:
   JSR PRT_STR
   JSR INPUT_CHAR_UART
   JSR PRT_S
+  CMP #"S" ; リセットボタン押すのめんどいとき用
+  BEQ RESET
   CMP #"L"
   BEQ LOAD
   CMP #"M"
@@ -202,8 +209,6 @@ CTRL:
   BNE CTRL1
   JMP PRTREG
 CTRL1:
-  CMP #"S" ; リセットボタン押すのめんどいとき用
-  BEQ RESET
   CMP #"G"
   BNE CTRL
 
@@ -448,6 +453,8 @@ INPUT_CHAR_UART:
   LDA INPUT_BF_BASE,X   ; バッファから読む、ここからRTSまでA使わない
   CMP #$0A              ;
   BEQ SKIP_ECHO         ; 改行文字はエコーしない方が融通が利く
+  BIT ECHO_F
+  BPL SKIP_ECHO         ; 設定に従う
   JSR PRT_CHAR_UART     ; ECHO
 SKIP_ECHO:
   INC ZP_INPUT_BF_RD_P  ; 読み取りポインタ増加
@@ -465,43 +472,39 @@ SKIP_RTSON:
 
 ; 通常より待ちの短い一文字送信。XOFF送信用。
 ; 時間計算をしているわけではないがとにかくこれで動く
-PRT_CHAR_SMALLDELAY:
+PRT_CHAR_SHORTDELAY:
   STA UART_TX
-  PHA
-  TXA
-  PHA
+  PHX
   LDX #$80
-SMALLDELAY:
+SHORTDELAY:
   NOP
   NOP
   DEX
-  BNE SMALLDELAY
-  PLA
-  TAX
-  PLA ; restore X, A
+  BNE SHORTDELAY
+  PLX
   RTS
+
 
 ; print A reg to UART
 PRT_CHAR_UART:
-  ;CMP UART_STATUS ; これいらんだろ
   STA UART_TX
 DELAY_6551:
-  PHA ; push A,X
-  TXA
-  PHA
+  PHY
+  PHX
 DELAY_LOOP:
-  LDX #$D0
+  LDY #16
+MINIDLY:
+  LDX #$68
 DELAY_1:
-  NOP
-  NOP
-  NOP
   DEX
   BNE DELAY_1
-  PLA
-  TAX
-  PLA ; restore X,A
+  DEY
+  BNE MINIDLY
+  PLX
+  PLY
 DELAY_DONE:
   RTS
+
 
 LCD_WAIT:
   PHA             ; Push A
@@ -565,7 +568,7 @@ IRQ_UART:
   BCC SKIP_RTSOFF ; A < M BLT
 ; バッファがきついのでXoff送信
   LDA #XOFF
-  JSR PRT_CHAR_SMALLDELAY
+  JSR PRT_CHAR_SHORTDELAY
   ;STA UART_TX
 SKIP_RTSOFF:
   CPX #$FF  ; バッファが完全に限界なら止める
