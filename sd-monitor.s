@@ -270,6 +270,8 @@ MODORU:
 ; *
 LOAD:
   JSR PRT_LF ; Lコマンド開始時改行
+  LDA #0
+  STA ECHO_F  ; エコーを切ったら速いかもしれない
 LOAD_CHECKTYPE:
   JSR INPUT_CHAR_UART
   CMP #"S"
@@ -294,8 +296,7 @@ LOAD_STORE_DATA
   JSR INPUT_BYT
   DEC LOAD_BYTCNT
   BEQ LOAD_ZEROBYT_CNT ; 全バイト読んだ
-  LDY #$0
-  STA (ADDR_INDEX_L),Y   ;Zero Page Indirect Indexed with Y
+  STA (ADDR_INDEX_L)   ; Zero Page Indirect
   INC ADDR_INDEX_L
   BNE LOAD_SKIPINC
   INC ADDR_INDEX_H
@@ -304,16 +305,21 @@ LOAD_SKIPINC:
 
 ; --- ゼロバイトを数える ---
 LOAD_ZEROBYT_CNT:
-  JSR PRT_LF    ; ここがレコード端のはずだから改行すると見やすい
+  ;JSR PRT_LF    ; ここがレコード端のはずだから改行すると見やすい
+  LDA #"#"    ; ここがレコード端のはずだからメッセージ
+  JSR PRT_CHAR_UART
   INC LOAD_CKSM
   BEQ LOAD_CHECKTYPE  ; チェックサムが256超えたらOK
-  JMP HATENA  ; おかしいのでハテナ出して終了
+  BRK
+  ;JMP HATENA  ; おかしいのでハテナ出して終了
 
 ; --- 最終レコードを読み飛ばす ---
 LOAD_SKIPLAST:
   JSR INPUT_CHAR_UART
   CMP #EOT
   BNE LOAD_SKIPLAST
+  LDA #%10000000
+  STA ECHO_F  ; エコーをもどす
   JMP CTRL
 
 ; *
