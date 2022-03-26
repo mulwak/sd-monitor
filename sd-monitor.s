@@ -21,6 +21,25 @@
 ; RD=READ
 ; WR=WRITE
 
+.MEMORYMAP
+  SLOTSIZE $8000
+  DEFAULTSLOT 3
+  SLOT 0 $0000
+  SLOTSIZE $6000
+  SLOT 1 $8000
+  SLOTSIZE $1000
+  SLOT 2 $E000
+  SLOT 3 $F000
+.ENDME
+
+.ROMBANKMAP
+  BANKSTOTAL  1
+  BANKSIZE    $1000
+  BANKS       1
+.ENDRO
+
+.SLOT 3
+
 ; --- アドレス定義 ---
 
 ; UART
@@ -121,8 +140,8 @@ XOFF = $13
 
 ; --- リセット ---
 
-  .ORG $E000  ; 256kbit書き込み機で64kbromを焼く場合の配慮
-  .ORG $F000
+  ;.ORG $E000  ; 256kbit書き込み機で64kbromを焼く場合の配慮
+  .ORGA $F000
 
 RESET:
 
@@ -184,7 +203,7 @@ RESET:
 ; --- LCDにHelloWorld表示（生存確認） ---
   LDX #0          ; Setup Index X
 PRT_SEIZON:
-  LDA MESSAGE,X
+  LDA MESSAGE.W,X
   BEQ CTRL        ; Branch if EQual(zeroflag=1 -> A=null byte)
   JSR PRT_CHAR_LCD
   INX
@@ -199,17 +218,17 @@ CTRL:
   JSR PRT_STR
   JSR INPUT_CHAR_UART
   JSR PRT_S
-  CMP #"S" ; リセットボタン押すのめんどいとき用
+  CMP #'S' ; リセットボタン押すのめんどいとき用
   BEQ RESET
-  CMP #"L"
+  CMP #'L'
   BEQ LOAD
-  CMP #"M"
+  CMP #'M'
   BEQ CHANGE
-  CMP #"R"
+  CMP #'R'
   BNE CTRL1
   JMP PRTREG
 CTRL1:
-  CMP #"G"
+  CMP #'G'
   BNE CTRL
 
 ; --- 状態を復帰して飛ぶ ---
@@ -260,7 +279,7 @@ CHANGE51:
   CMP (ADDR_INDEX_L),Y
   BEQ CHANGEINC ; did change
 HATENA:
-  LDA #"?"
+  LDA #'?'
   JSR PRT_CHAR_UART
 MODORU:
   JMP CTRL
@@ -274,12 +293,12 @@ LOAD:
   STA ECHO_F  ; エコーを切ったら速いかもしれない
 LOAD_CHECKTYPE:
   JSR INPUT_CHAR_UART
-  CMP #"S"
+  CMP #'S'
   BNE LOAD_CHECKTYPE  ; 最初の文字がSじゃないというのはありえないが
   JSR INPUT_CHAR_UART
-  CMP #"9"
+  CMP #'9'
   BEQ LOAD_SKIPLAST  ; 最終レコード
-  CMP #"1"
+  CMP #'1'
   BNE LOAD_CHECKTYPE  ; S1以外のレコードはどうでもいい
   LDA #0
   STA LOAD_CKSM
@@ -306,7 +325,7 @@ LOAD_SKIPINC:
 ; --- ゼロバイトを数える ---
 LOAD_ZEROBYT_CNT:
   ;JSR PRT_LF    ; ここがレコード端のはずだから改行すると見やすい
-  LDA #"#"    ; ここがレコード端のはずだからメッセージ
+  LDA #'#'    ; ここがレコード端のはずだからメッセージ
   JSR PRT_CHAR_UART
   INC LOAD_CKSM
   BEQ LOAD_CHECKTYPE  ; チェックサムが256超えたらOK
@@ -382,20 +401,20 @@ PRT_BYT1:
 ; --- Aレジスタの一文字をNibbleとして値にする ---
 ; *
 NIB_DECODE:
-  CMP #"0"
+  CMP #'0'
   BMI NIB_ERR
-  CMP #"9"+1
+  CMP #'9'+1
   BPL NIB_HEX
   SEC
-  SBC #"0"
+  SBC #'0'
   RTS
 NIB_HEX:
-  CMP #"A"
+  CMP #'A'
   BMI NIB_ERR
-  CMP #"F"+1
+  CMP #'F'+1
   BPL NIB_ERR
   SEC
-  SBC #"A"-$0A
+  SBC #'A'-$0A
   RTS
 NIB_ERR:
   BRK
@@ -422,7 +441,7 @@ PRT_STR_EXIT:
 ; *
 PRT_S:
   PHA
-  LDA #" "
+  LDA #' '
   JSR PRT_CHAR_UART
   PLA
   RTS
@@ -654,7 +673,7 @@ PRTREG:  ; print contents of stack
 
 ; A
   JSR PRT_S
-  LDA #"a"
+  LDA #'a'
   JSR PRT_CHAR_UART
 
   LDA A_SAVE ; Acc reg
@@ -662,7 +681,7 @@ PRTREG:  ; print contents of stack
 
 ; X
   JSR PRT_S
-  LDA #"x"
+  LDA #'x'
   JSR PRT_CHAR_UART
 
   LDA X_SAVE  ; X reg
@@ -670,7 +689,7 @@ PRTREG:  ; print contents of stack
 
 ; Y
   JSR PRT_S
-  LDA #"y"
+  LDA #'y'
   JSR PRT_CHAR_UART
 
   LDA Y_SAVE  ; Y reg
@@ -678,7 +697,7 @@ PRTREG:  ; print contents of stack
 
 ; Flag
   JSR PRT_S
-  LDA #"f"
+  LDA #'f'
   JSR PRT_CHAR_UART
 
   LDX SP_SAVE ; Flags
@@ -688,7 +707,7 @@ PRTREG:  ; print contents of stack
 
 ; PC
   JSR PRT_S
-  LDA #"p"
+  LDA #'p'
   JSR PRT_CHAR_UART
 
   INX         ; SP+3=PCH
@@ -701,7 +720,7 @@ PRTREG:  ; print contents of stack
   JSR PRT_BYT
 
   JSR PRT_S
-  LDA #"s"
+  LDA #'s'
   JSR PRT_CHAR_UART
 
 ; SP
@@ -710,10 +729,11 @@ PRTREG:  ; print contents of stack
   CLI
   JMP CTRL
 
-NEWLINE: .ASCIIZ $A,"*"
-MESSAGE: .ASCIIZ "SD-Monitor  V.02","                        ","      for FxT-65"
+NEWLINE: .BYT $A,"*"
+MESSAGE: .BYT "SD-Monitor  V.02","                        ","      for FxT-65"
 
-  .ORG $FFFA
+  .ORGA $FFFA
   .WORD NMI
   .WORD RESET
   .WORD IRQ
+
