@@ -21,25 +21,6 @@
 ; RD=READ
 ; WR=WRITE
 
-.MEMORYMAP
-  SLOTSIZE $8000
-  DEFAULTSLOT 3
-  SLOT 0 $0000
-  SLOTSIZE $6000
-  SLOT 1 $8000
-  SLOTSIZE $1000
-  SLOT 2 $E000
-  SLOT 3 $F000
-.ENDME
-
-.ROMBANKMAP
-  BANKSTOTAL  1
-  BANKSIZE    $1000
-  BANKS       1
-.ENDRO
-
-.SLOT 3
-
 ; --- アドレス定義 ---
 
 ; UART
@@ -140,8 +121,8 @@ XOFF = $13
 
 ; --- リセット ---
 
-  ;.ORG $E000  ; 256kbit書き込み機で64kbromを焼く場合の配慮
-  .ORGA $F000
+  ;.ORG $F000
+  *=$F000
 
 RESET:
 
@@ -203,7 +184,7 @@ RESET:
 ; --- LCDにHelloWorld表示（生存確認） ---
   LDX #0          ; Setup Index X
 PRT_SEIZON:
-  LDA MESSAGE.W,X
+  LDA MESSAGE,X
   BEQ CTRL        ; Branch if EQual(zeroflag=1 -> A=null byte)
   JSR PRT_CHAR_LCD
   INX
@@ -541,7 +522,7 @@ LCDBUSY:
   LDA #(RW | E)
   STA PORTA
   LDA PORTB       ; Read data from LCD
-  AND #%10000000  ; if busy then %10000000 -> not zero -> zeroflag:0
+  AND #%10000000  // if busy then %10000000 -> not zero -> zeroflag:0
   BNE LCDBUSY     ; Branch if Not Equal(zeroflag=0)
 
   LDA #RW
@@ -732,7 +713,8 @@ PRTREG:  ; print contents of stack
 NEWLINE: .BYT $A,"*"
 MESSAGE: .BYT "SD-Monitor  V.02","                        ","      for FxT-65"
 
-  .ORGA $FFFA
+  ;.ORG $FFFA
+  *=$FFFA
   .WORD NMI
   .WORD RESET
   .WORD IRQ
