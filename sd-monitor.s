@@ -21,98 +21,49 @@
 ; RD=READ
 ; WR=WRITE
 
+.INCLUDE "FXT65.inc"
+
 ; --- アドレス定義 ---
 
-; UART
-UARTBASE = $E000
-UART_RX = UARTBASE
-UART_TX = UARTBASE
-UART_STATUS = UARTBASE+1
-UART_COMMAND = UARTBASE+2
-UART_CONTROL = UARTBASE+3
-
-; VIA
-VIABASE = $E200
-PORTB = VIABASE
-PORTA = VIABASE+1
-DDRB = VIABASE+2
-DDRA = VIABASE+3
-IFR = VIABASE+$D
-
-; YMZ
-YMZBASE = $E400
-
-; CRTC
-CRTCBASE = $E600
-
-
 ; アプリケーションRAM領域（ゼロページ）
-ZP_RAMBASE = $0000
-A1L = ZP_RAMBASE  ; Apple][式の汎用レジスタ扱い
-A1H = ZP_RAMBASE+1
-A2L = ZP_RAMBASE+2
-A2H = ZP_RAMBASE+3
-A3L = ZP_RAMBASE+4
-A3H = ZP_RAMBASE+5
-A4L = ZP_RAMBASE+6
-A4H = ZP_RAMBASE+7
-A5L = ZP_RAMBASE+8
-A5H = ZP_RAMBASE+9
-
-; モニタRAM領域（ゼロページ） さかさまに取っていくのでHLの順に注意
-MON_ZP_RAMBASE = $00FF
-ADDR_INDEX_H = MON_ZP_RAMBASE
-ADDR_INDEX_L = MON_ZP_RAMBASE-1  ; 各所で使うので専用
-ZP_INPUT_BF_WR_P = MON_ZP_RAMBASE-2
-ZP_INPUT_BF_RD_P = MON_ZP_RAMBASE-3
-ZP_INPUT_BF_LEN = MON_ZP_RAMBASE-4
-ECHO_F = MON_ZP_RAMBASE-5     ; エコーフラグ
+.ZEROPAGE
+  ZR0:               .RES 2  ; Apple][のA1Lをまねた汎用レジスタ
+  ZR1:               .RES 2
+  ZR2:               .RES 2
+  ZR3:               .RES 2
+  ZR4:               .RES 2
+  ADDR_INDEX_L:      .RES 1  ; 各所で使うので専用
+  ADDR_INDEX_H:      .RES 1
+  ZP_INPUT_BF_WR_P:  .RES 1
+  ZP_INPUT_BF_RD_P:  .RES 1
+  ZP_INPUT_BF_LEN:   .RES 1
+  ECHO_F:            .RES 1  ; エコーフラグ
 
 ; UART受信用リングバッファ
-INPUT_BF_BASE = $0200
 
 ; モニタRAM領域
-MON_RAMBASE = $0300
-SP_SAVE = MON_RAMBASE ; BRK時の各レジスタのセーブ領域。
-A_SAVE = MON_RAMBASE+1
-X_SAVE = MON_RAMBASE+2
-Y_SAVE = MON_RAMBASE+3
-A1L_SAVE = MON_RAMBASE+4
-A1H_SAVE = MON_RAMBASE+5
-A2L_SAVE = MON_RAMBASE+6
-A2H_SAVE = MON_RAMBASE+7
-A3L_SAVE = MON_RAMBASE+8
-A3H_SAVE = MON_RAMBASE+9
-A4L_SAVE = MON_RAMBASE+10
-A4H_SAVE = MON_RAMBASE+11
-A5L_SAVE = MON_RAMBASE+12
-A5H_SAVE = MON_RAMBASE+13
-LOAD_CKSM = MON_RAMBASE+14
-LOAD_BYTCNT = MON_RAMBASE+15
-T1_IRQ_VEC = MON_RAMBASE+16 ; 2byte アプリケーションが用意するタイマ割り込み処理のベクタ
-UART_IRQ_VEC = MON_RAMBASE+18 ; 2byte アプリケーションによってとび先を変えられる、UART割り込み処理のベクタ
-
-; アプリケーションRAM領域
-APP_RAMBASE = $0400
+.SEGMENT "MONVAR"
+  INPUT_BF_BASE:  .RES 256
+  SP_SAVE:        .RES 1  ; BRK時の各レジスタのセーブ領域。
+  A_SAVE:         .RES 1
+  X_SAVE:         .RES 1
+  Y_SAVE:         .RES 1
+  ZR0_SAVE:       .RES 2
+  ZR1_SAVE:       .RES 2
+  ZR2_SAVE:       .RES 2
+  ZR3_SAVE:       .RES 2
+  ZR4_SAVE:       .RES 2
+  LOAD_CKSM:      .RES 1
+  LOAD_BYTCNT:    .RES 1
+  T1_IRQ_VEC:     .RES 2  ; 2byte アプリケーションが用意するタイマ割り込み処理のベクタ
+  UART_IRQ_VEC:   .RES 2  ; 2byte アプリケーションによってとび先を変えられる、UART割り込み処理のベクタ
 
 ; --- 定数定義 ---
-; UART COMMAND
-; PMC1/PMC0/PME/REM/TIC1/TIC0/IRD/DTR
-; 全てゼロだと「エコーオフ、RTSオフ、割り込み有効、DTRオフ」
-RTS_ON =    %00001000
-ECHO_ON =   %00010000
-RIRQ_OFF =  %00000010
-DTR_ON =    %00000001
 ; 使える設定集
-UARTCMD_WELLCOME = RTS_ON|DTR_ON
-;UARTCMD_WELLCOME = RTS_ON|DTR_ON|RIRQ_OFF
-UARTCMD_BUSY = DTR_ON
-UARTCMD_DOWN = RIRQ_OFF
-
-; LCD PIN割り当て
-E   = %10000000
-RW  = %01000000
-RS  = %00100000
+UARTCMD_WELLCOME = UART::CMD::RTS_ON|UART::CMD::DTR_ON
+;UARTCMD_WELLCOME = UART::CMD::RTS_ON|UART::CMD::DTR_ON|UART::CMD::RIRQ_OFF
+UARTCMD_BUSY = UART::CMD::DTR_ON
+UARTCMD_DOWN = UART::CMD::RIRQ_OFF
 
 STACK = $FF ; モニタもアプリも普通にここから積み上げていこう？
 EOT = $04 ; EOFでもある
@@ -121,16 +72,14 @@ XOFF = $13
 
 ; --- リセット ---
 
-  ;.ORG $F000
-  *=$F000
-
+.SEGMENT "SDMON"
 RESET:
 
 ; --- LCD初期化 ---
   LDA #%11111111  ; Set all pins on port B to output
-  STA DDRB
+  STA VIA::DDRB
   LDA #%11100000  ; Set top 3 pins on port A to output
-  STA DDRA
+  STA VIA::DDRA
 
   LDA #%00111000  ; Set 8-bit mode; 2-line display; 5x8 font
   JSR LCD_INST
@@ -143,12 +92,12 @@ RESET:
 
 ; --- UART初期化 ---
   LDA #$00
-  STA UART_STATUS
+  STA UART::STATUS
   LDA #UARTCMD_WELLCOME
-  STA UART_COMMAND
+  STA UART::COMMAND
   ; SBN/WL1/WL0/RSC/SBR3/SBR2/SBR1/SBR0
   LDA #%00011011 ; 1stopbit,word=8bit,rx-rate=tx-rate,xl/512
-  STA UART_CONTROL
+  STA UART::CONTROL
 
 ; --- UART受信リングバッファのリセット ---
   LDA #0
@@ -184,7 +133,7 @@ RESET:
 ; --- LCDにHelloWorld表示（生存確認） ---
   LDX #0          ; Setup Index X
 PRT_SEIZON:
-  LDA MESSAGE,X
+  LDA STR_MESSAGE,X
   BEQ CTRL        ; Branch if EQual(zeroflag=1 -> A=null byte)
   JSR PRT_CHAR_LCD
   INX
@@ -194,8 +143,8 @@ PRT_SEIZON:
 ; --- COMMAND CONTROL ---
 ; *
 CTRL:
-  LDA #<NEWLINE
-  LDX #>NEWLINE
+  LDA #<STR_NEWLINE
+  LDX #>STR_NEWLINE
   JSR PRT_STR
   JSR INPUT_CHAR_UART
   JSR PRT_S
@@ -217,11 +166,11 @@ CTRL1:
   LDX SP_SAVE
   TXS
 ; 汎用ZP復帰
-  LDA A1L_SAVE
-  STA A1L
-  LDA A1H_SAVE
-  STA A1H
-  ; ここでA2L～A5Hを復帰（サボってる）
+  LDA ZR0_SAVE
+  STA ZR0
+  LDA ZR0_SAVE+1
+  STA ZR0+1
+  ; ここでZR1～A5Hを復帰（サボってる）
 ; レジスタ復帰
   LDA A_SAVE
   LDX X_SAVE
@@ -239,8 +188,8 @@ CHANGEINC:
   BNE CHANGE51
   INC ADDR_INDEX_H
 CHANGE51:
-  LDA #<NEWLINE
-  LDX #>NEWLINE
+  LDA #<STR_NEWLINE
+  LDX #>STR_NEWLINE
   JSR PRT_STR
   LDA ADDR_INDEX_H
   JSR PRT_BYT ;print high addr
@@ -292,7 +241,7 @@ LOAD_CHECKTYPE:
   JSR BUILD_ADDR
 
 ; --- データ部 ---
-LOAD_STORE_DATA
+LOAD_STORE_DATA:
   JSR INPUT_BYT
   DEC LOAD_BYTCNT
   BEQ LOAD_ZEROBYT_CNT ; 全バイト読んだ
@@ -344,15 +293,15 @@ INPUT_BYT:
   ASL
   ASL
   ASL
-  STA A1L
+  STA ZR0
   JSR INPUT_CHAR_UART
   JSR NIB_DECODE
-  ORA A1L
-  STA A1L
+  ORA ZR0
+  STA ZR0
   CLC
   ADC LOAD_CKSM ; Sレコードのチェックサム計算
   STA LOAD_CKSM
-  LDA A1L
+  LDA ZR0
   RTS
 
 ; *
@@ -405,11 +354,11 @@ NIB_ERR:
 ; 先頭アドレスを指定する
 ; *
 PRT_STR:
-  STA A1L
-  STX A1H
+  STA ZR0
+  STX ZR0+1
   LDY #$00
 PRT_STR_LOOP:
-  LDA (A1L),Y   ;Zero Page Indirect Indexed with Y
+  LDA (ZR0),Y   ;Zero Page Indirect Indexed with Y
   BEQ PRT_STR_EXIT
   JSR PRT_CHAR_UART
   INY
@@ -479,7 +428,7 @@ SKIP_RTSON:
 ; 通常より待ちの短い一文字送信。XOFF送信用。
 ; 時間計算をしているわけではないがとにかくこれで動く
 PRT_CHAR_SHORTDELAY:
-  STA UART_TX
+  STA UART::TX
   PHX
   LDX #$80
 SHORTDELAY:
@@ -493,7 +442,7 @@ SHORTDELAY:
 
 ; print A reg to UART
 PRT_CHAR_UART:
-  STA UART_TX
+  STA UART::TX
 DELAY_6551:
   PHY
   PHX
@@ -511,49 +460,47 @@ DELAY_1:
 DELAY_DONE:
   RTS
 
-
 LCD_WAIT:
   PHA             ; Push A
   LDA #%00000000  ; Port B is input
-  STA DDRB
+  STA VIA::DDRB
 LCDBUSY:
-  LDA #RW
-  STA PORTA
-  LDA #(RW | E)
-  STA PORTA
-  LDA PORTB       ; Read data from LCD
-  AND #%10000000  // if busy then %10000000 -> not zero -> zeroflag:0
+  LDA #VIA::CMD::RW
+  STA VIA::PORTA
+  LDA #(VIA::CMD::RW | VIA::CMD::E)
+  STA VIA::PORTA
+  LDA VIA::PORTB       ; Read data from LCD
+  AND #%10000000  ; if busy then %10000000 -> not zero -> zeroflag:0
   BNE LCDBUSY     ; Branch if Not Equal(zeroflag=0)
 
-  LDA #RW
-  STA PORTA
+  LDA #VIA::CMD::RW
+  STA VIA::PORTA
   LDA #%11111111  ; Port B is output
-  STA DDRB
+  STA VIA::DDRB
   PLA             ; Pull A
   RTS
 
 LCD_INST:
   JSR LCD_WAIT
-  STA PORTB
+  STA VIA::PORTB
   LDA #0          ; Clear RS/RW/E bits
-  STA PORTA
-  LDA #E          ; Enable up-down
-  STA PORTA
+  STA VIA::PORTA
+  LDA #VIA::CMD::E          ; Enable up-down
+  STA VIA::PORTA
   LDA #0          ; Clear (RS/RW)/E bits
-  STA PORTA
+  STA VIA::PORTA
   RTS
 
 PRT_CHAR_LCD:
   JSR LCD_WAIT
-  STA PORTB
-  LDA #RS         ; Only RegSelect HIGH
-  STA PORTA
-  LDA #(RS | E)   ; RegSelect and Enable HIGH
-  STA PORTA
-  LDA #RS         ; Enable LOW
-  STA PORTA
+  STA VIA::PORTB
+  LDA #VIA::CMD::RS         ; Only RegSelect HIGH
+  STA VIA::PORTA
+  LDA #(VIA::CMD::RS | VIA::CMD::E)   ; RegSelect and Enable HIGH
+  STA VIA::PORTA
+  LDA #VIA::CMD::RS         ; Enable LOW
+  STA VIA::PORTA
   RTS
-
 
 NMI:
   RTI
@@ -566,7 +513,7 @@ IRQ_UART:
   TXA
   PHA
 ; すなわち受信割り込み
-  LDA UART_RX          ; UARTから読み取り
+  LDA UART::RX          ; UARTから読み取り
   LDX ZP_INPUT_BF_WR_P ; バッファの書き込み位置インデックス
   STA INPUT_BF_BASE,X ; バッファへ書き込み
   LDX ZP_INPUT_BF_LEN
@@ -575,16 +522,16 @@ IRQ_UART:
 ; バッファがきついのでXoff送信
   LDA #XOFF
   JSR PRT_CHAR_SHORTDELAY
-  ;STA UART_TX
+  ;STA UART::TX
 SKIP_RTSOFF:
   CPX #$FF  ; バッファが完全に限界なら止める
   BNE SKIP_BRK
   BRK
-SKIP_BRK
+SKIP_BRK:
 ; ポインタ増加
   INC ZP_INPUT_BF_WR_P
   INC ZP_INPUT_BF_LEN
-EXIT_UART_IRQ
+EXIT_UART_IRQ:
   PLA
   TAX
   PLA
@@ -600,7 +547,7 @@ IRQ:
 ; --- 外部割込み判別 ---
   PHA ; まだXY使用禁止
 ; UART
-  LDA UART_STATUS
+  LDA UART::STATUS
   ;ROL ; キャリーにIRQが
   ;BCC CHECK_VIA_IRQ
   BIT #%00001000
@@ -608,7 +555,7 @@ IRQ:
   JMP (UART_IRQ_VEC) ; ベクタに飛ぶ（デフォルトで設定されているが変更されうる）
 ; VIA
 CHECK_VIA_IRQ:
-  LDA IFR ; 割り込みフラグレジスタ読み取り
+  LDA VIA::IFR ; 割り込みフラグレジスタ読み取り
   ROL ; キャリーにIRQが
   ROL ; キャリーにTIMER1が
   BCC IRQ_DEBUG ; TIMER1割り込みじゃないならとりあえず無視
@@ -620,11 +567,11 @@ IRQ_DEBUG:
   STA A_SAVE
   STX X_SAVE
   STY Y_SAVE
-  LDA A1L
-  STA A1L_SAVE
-  LDA A1H
-  STA A1H_SAVE
-  ; ここでA2L～A5Hを退避（サボってる）
+  LDA ZR0
+  STA ZR0_SAVE
+  LDA ZR0+1
+  STA ZR0_SAVE+1
+  ; ここでZR1～A5Hを退避（サボってる）
   TSX
   STX SP_SAVE ; save targets stack poi
 
@@ -648,8 +595,8 @@ SKIPHDEC:
 PRTREG:  ; print contents of stack
 
 ; 表示中にさらにBRKされると分かりづらいので改行
-  LDA #<NEWLINE
-  LDX #>NEWLINE
+  LDA #<STR_NEWLINE
+  LDX #>STR_NEWLINE
   JSR PRT_STR
 
 ; A
@@ -710,12 +657,11 @@ PRTREG:  ; print contents of stack
   CLI
   JMP CTRL
 
-NEWLINE: .BYT $A,"*"
-MESSAGE: .BYT "SD-Monitor  V.02","                        ","      for FxT-65"
+STR_NEWLINE: .BYT $A,"*"
+STR_MESSAGE: .BYT "SD-Monitor  V.02","                        ","      for FxT-65"
 
-  ;.ORG $FFFA
-  *=$FFFA
-  .WORD NMI
-  .WORD RESET
-  .WORD IRQ
+.SEGMENT "VECTORS"
+.WORD NMI
+.WORD RESET
+.WORD IRQ
 
