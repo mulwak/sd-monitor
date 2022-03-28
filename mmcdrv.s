@@ -854,19 +854,29 @@ FILE_NEXTSEC:
   PLA
   JSR L_SB_BYT
 CK_ENDSEC_FLG:
-  ; 残るバイト数が512以上かを判定
+  ; 残るバイト数を評価
+  ; ゼロ    0  （次のデータを要求してはいけない）
+  ; 512以下 1
+  ; 512以上 2
   LDA FILE::RES_SIZ+1
   AND #%11111110
   ORA FILE::RES_SIZ+2
   ORA FILE::RES_SIZ+3
   BNE @SKP_SETF
+  ; 512以下である
+  ORA FILE::RES_SIZ+1
+  ORA FILE::RES_SIZ
+  BEQ @ZERO   ; 完全なるゼロ
   LDA #$1
   BRA @SKP_RSTF
 @SKP_SETF:
-  LDA #$0
+  ; 512以上である
+  LDA #$2
 @SKP_RSTF:
+@ZERO:
   STA FILE::ENDSEC_FLG
   RTS
+
 
 FILE_RDWORD:
   ; ファイルからデータを2バイト読み出してAXに
@@ -925,14 +935,18 @@ FILE_DLFULL:
   JSR FILE_SETSIZ
 @CK:
   JSR CK_ENDSEC_FLG
-  BNE @ENDSEC
+  CMP #1
+  BEQ @ENDSEC           ; $1であれば最終セクタ
 @LOOP:
   loadmem16 ZP_SDCMDPRM_VEC16,FILE::REAL_SEC
   JSR SD_RDSEC
   INC ZP_SDSEEK_VEC16+1
   JSR FILE_NEXTSEC
-  BEQ @LOOP
+  CMP #2
+  BEQ @LOOP              ; $2ならループ
 @ENDSEC:
+  CMP #0
+  BEQ @END               ; $0なら終わり
   ; 最終セクタ
   LDA #$80
   STA DRV::SEC_RESWORD
@@ -971,7 +985,9 @@ FILE_DLFULL:
   ADC DRV::SEC_RESWORD
   STA DRV::SEC_RESWORD
   JSR FILE_THROWSEC
+@END:
   RTS
+
 
 ;CLUS2SEC_AXD:
   ; 作業するDSTをAX指定
