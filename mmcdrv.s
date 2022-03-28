@@ -1,3 +1,4 @@
+;DEBUGBUILD:
 ; https://github.com/gfoot/sdcard6502/blob/master/src/1_readwritebyte.s
 .PROC MON
   .INCLUDE "sd-monitor.s"
@@ -335,6 +336,9 @@ SD_RDINIT:
   JSR SD_SENDCMD
   CMP #$00
   BEQ @RDSUCCESS
+  CMP #$04          ; この例が多い
+  JSR DELAY
+  BEQ SD_RDINIT
   BRK
 @RDSUCCESS:
   ;print STR_S
