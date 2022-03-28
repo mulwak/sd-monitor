@@ -40,23 +40,27 @@
   ECHO_F:            .RES 1  ; エコーフラグ
 
 ; UART受信用リングバッファ
+.SEGMENT "ALIGN100VAR"
+INPUT_BF_BASE:.RES 256
 
 ; モニタRAM領域
 .SEGMENT "MONVAR"
-  INPUT_BF_BASE:  .RES 256
-  SP_SAVE:        .RES 1  ; BRK時の各レジスタのセーブ領域。
-  A_SAVE:         .RES 1
-  X_SAVE:         .RES 1
-  Y_SAVE:         .RES 1
-  ZR0_SAVE:       .RES 2
-  ZR1_SAVE:       .RES 2
-  ZR2_SAVE:       .RES 2
-  ZR3_SAVE:       .RES 2
-  ZR4_SAVE:       .RES 2
-  LOAD_CKSM:      .RES 1
-  LOAD_BYTCNT:    .RES 1
-  T1_IRQ_VEC:     .RES 2  ; 2byte アプリケーションが用意するタイマ割り込み処理のベクタ
-  UART_IRQ_VEC:   .RES 2  ; 2byte アプリケーションによってとび先を変えられる、UART割り込み処理のベクタ
+  SP_SAVE:      .RES 1  ; BRK時の各レジスタのセーブ領域。
+  A_SAVE:       .RES 1
+  X_SAVE:       .RES 1
+  Y_SAVE:       .RES 1
+  ZR0_SAVE:     .RES 2
+  ZR1_SAVE:     .RES 2
+  ZR2_SAVE:     .RES 2
+  ZR3_SAVE:     .RES 2
+  ZR4_SAVE:     .RES 2
+  LOAD_CKSM:    .RES 1
+  LOAD_BYTCNT:  .RES 1
+  T1_IRQ_VEC:   .RES 2  ; 2byte アプリケーションが用意するタイマ割り込み処理のベクタ
+  UART_IRQ_VEC: .RES 2  ; 2byte アプリケーションによってとび先を変えられる、UART割り込み処理のベクタ
+
+; アプリケーションRAM領域
+APP_RAMBASE = $0400
 
 ; --- 定数定義 ---
 ; 使える設定集
@@ -72,6 +76,8 @@ XOFF = $13
 
 ; --- リセット ---
 
+  ;.ORG $F000
+  ;*=$F000
 .SEGMENT "SDMON"
 RESET:
 
@@ -134,10 +140,13 @@ RESET:
   LDX #0          ; Setup Index X
 PRT_SEIZON:
   LDA STR_MESSAGE,X
-  BEQ CTRL        ; Branch if EQual(zeroflag=1 -> A=null byte)
+  BEQ JMP_IPL        ; Branch if EQual(zeroflag=1 -> A=null byte)
   JSR PRT_CHAR_LCD
   INX
-  JMP PRT_SEIZON
+  BRA PRT_SEIZON
+
+JMP_IPL:
+  JMP IPL_RESET
 
 ; *
 ; --- COMMAND CONTROL ---
@@ -465,15 +474,15 @@ LCD_WAIT:
   LDA #%00000000  ; Port B is input
   STA VIA::DDRB
 LCDBUSY:
-  LDA #VIA::CMD::RW
+  LDA #VIA::BPIN::LCD_RW
   STA VIA::PORTA
-  LDA #(VIA::CMD::RW | VIA::CMD::E)
+  LDA #(VIA::BPIN::LCD_RW | VIA::BPIN::LCD_E)
   STA VIA::PORTA
   LDA VIA::PORTB       ; Read data from LCD
   AND #%10000000  ; if busy then %10000000 -> not zero -> zeroflag:0
   BNE LCDBUSY     ; Branch if Not Equal(zeroflag=0)
 
-  LDA #VIA::CMD::RW
+  LDA #VIA::BPIN::LCD_RW
   STA VIA::PORTA
   LDA #%11111111  ; Port B is output
   STA VIA::DDRB
@@ -485,7 +494,7 @@ LCD_INST:
   STA VIA::PORTB
   LDA #0          ; Clear RS/RW/E bits
   STA VIA::PORTA
-  LDA #VIA::CMD::E          ; Enable up-down
+  LDA #VIA::BPIN::LCD_E          ; Enable up-down
   STA VIA::PORTA
   LDA #0          ; Clear (RS/RW)/E bits
   STA VIA::PORTA
@@ -494,11 +503,11 @@ LCD_INST:
 PRT_CHAR_LCD:
   JSR LCD_WAIT
   STA VIA::PORTB
-  LDA #VIA::CMD::RS         ; Only RegSelect HIGH
+  LDA #VIA::BPIN::LCD_RS         ; Only RegSelect HIGH
   STA VIA::PORTA
-  LDA #(VIA::CMD::RS | VIA::CMD::E)   ; RegSelect and Enable HIGH
+  LDA #(VIA::BPIN::LCD_RS | VIA::BPIN::LCD_E)   ; RegSelect and Enable HIGH
   STA VIA::PORTA
-  LDA #VIA::CMD::RS         ; Enable LOW
+  LDA #VIA::BPIN::LCD_RS         ; Enable LOW
   STA VIA::PORTA
   RTS
 
@@ -657,8 +666,8 @@ PRTREG:  ; print contents of stack
   CLI
   JMP CTRL
 
-STR_NEWLINE: .BYT $A,"*"
-STR_MESSAGE: .BYT "SD-Monitor  V.02","                        ","      for FxT-65"
+STR_NEWLINE: .BYT $A,"*",$00
+STR_MESSAGE: .BYT "SD-Monitor  V.02","                        ","      for FxT-65",$00
 
 .SEGMENT "VECTORS"
 .WORD NMI
