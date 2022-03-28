@@ -531,7 +531,7 @@ IRQ_UART:
 ; バッファがきついのでXoff送信
   LDA #XOFF
   JSR PRT_CHAR_SHORTDELAY
-  ;STA UART::TX
+  STA UART::TX
 SKIP_RTSOFF:
   CPX #$FF  ; バッファが完全に限界なら止める
   BNE SKIP_BRK
