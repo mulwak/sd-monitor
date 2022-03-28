@@ -458,7 +458,9 @@ OK:
 
 
 MESSAGES:
-STR_CMD:     .BYTE $A,"CMD$",$0
+.IFDEF DEBUGBUILD
+  STR_CMD:     .BYTE $A,"CMD$",$0
+.ENDIF
 STR_START:   .BYTE $A,"IPL V.00",$A,$0
 STR_SDINIT:  .BYTE "SD:Init...",$0   ; この後に!?
 STR_OLDSD:   .BYTE "SD:Old",$A,$0
@@ -542,12 +544,16 @@ SD_SENDCMD:
   ; ZP_SDCMD_VEC16の示すところに配置されたコマンド列を送信する
   ; Aのコマンド、ZP_SDCMDPRM_VEC16のパラメータ、SDCMD_CRCをコマンド列として送信する。
   PHA
+
+.IFDEF DEBUGBUILD
   ; コマンド内容表示
   print STR_CMD
   PLA
   PHA
   AND #%00111111
   JSR PRT_BYT_S
+.ENDIF
+
   ; コマンド開始
   LDA #SD_MOSI ; CSロー
   STA VIA::PORTA
@@ -558,24 +564,36 @@ SD_SENDCMD:
   LDY #3
 @LOOP:
   LDA (ZP_SDCMDPRM_VEC16),Y
+
   PHY
   ; 引数表示
   PHA
   JSR SD_WRBYT
   PLA
+.IFDEF DEBUGBUILD
   JSR PRT_BYT_S
+.ENDIF
   PLY
+
   DEY
   BPL @LOOP
   ; CRC送信
   LDA SDCMD_CRC
   JSR SD_WRBYT
+
+.IFDEF DEBUGBUILD
   ; レス表示
   LDA #'='
   JSR MON::PRT_CHAR_UART
+.ENDIF
+
   JSR SD_WAITRES
   PHA
+
+.IFDEF DEBUGBUILD
   JSR PRT_BYT_S
+.ENDIF
+
   LDA #SD_CS|SD_MOSI ; CSハイ
   STA VIA::PORTA
   LDX #(8*2)

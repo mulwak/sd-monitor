@@ -228,7 +228,7 @@ MODORU:
 ; *
 LOAD:
   JSR PRT_LF ; Lコマンド開始時改行
-  LDA #0
+  LDA #1
   STA ECHO_F  ; エコーを切ったら速いかもしれない
 LOAD_CHECKTYPE:
   JSR INPUT_CHAR_UART
@@ -245,6 +245,10 @@ LOAD_CHECKTYPE:
   SEC
   SBC #$2
   STA LOAD_BYTCNT
+  ; 何バイトのレコードかを表示
+  ;JSR PRT_LF
+  ;JSR PRT_BYT
+  ;JSR PRT_LF
 
 ; --- アドレス部 ---
   JSR BUILD_ADDR
@@ -295,8 +299,9 @@ BUILD_ADDR:
 ; *
 INPUT_BYT:
   JSR INPUT_CHAR_UART
-  CMP #$0A
+  CMP #$0A              ; 改行だったらCTRLに戻る
   BEQ HATENA
+  ;BEQ DEBUG_INPUT_BYT
   JSR NIB_DECODE
   ASL
   ASL
@@ -312,6 +317,26 @@ INPUT_BYT:
   STA LOAD_CKSM
   LDA ZR0
   RTS
+
+;DEBUG_INPUT_BYT:
+;  LDA ZP_INPUT_BF_WR_P
+;  JSR PRT_BYT
+;  JSR PRT_S
+;  LDA ZP_INPUT_BF_RD_P
+;  JSR PRT_BYT
+;  JSR PRT_S
+;  LDA ZP_INPUT_BF_LEN
+;  JSR PRT_BYT
+;  JSR PRT_S
+;  LDA #<INPUT_BF_BASE
+;  STA ZP_GP0_VEC16
+;  LDA #>INPUT_BF_BASE
+;  STA ZP_GP0_VEC16+1
+;  JSR DUMPPAGE
+;  STZ ZP_INPUT_BF_WR_P
+;  STZ ZP_INPUT_BF_RD_P
+;  STZ ZP_INPUT_BF_LEN
+;  BRK
 
 ; *
 ; --- Aレジスタを二桁のhexで表示 ---
@@ -531,7 +556,7 @@ IRQ_UART:
 ; バッファがきついのでXoff送信
   LDA #XOFF
   JSR PRT_CHAR_SHORTDELAY
-  STA UART::TX
+  ;STA UART::TX
 SKIP_RTSOFF:
   CPX #$FF  ; バッファが完全に限界なら止める
   BNE SKIP_BRK
