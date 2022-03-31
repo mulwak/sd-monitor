@@ -3,6 +3,7 @@
 ; MON::でモニタにアクセスできること。
 
 .INCLUDE "FXT65.inc"
+.INCLUDE "fscons.inc"
 .INCLUDE "generic.mac"
 
 ; 命名規則
@@ -21,34 +22,16 @@ SD_MISO = VIA::BPIN::SD_MISO
 
 PORTA_OUTPUTPINS = LCD_E|LCD_RW|LCD_RS|SD_CS|SD_SCK|SD_MOSI
 
-SD_STBITS = %01000000
-SDCMD0_CRC = $95
-SDCMD8_CRC = $87
-
-; MBRオフセット
-OFS_MBR_PARTBL = 446
-; 区画テーブルオフセット
-OFS_PT_SYSTEMID = 4
-OFS_PT_LBAOFS = 8
-; BIOSパラメータブロックオフセット
-OFS_BPB_SECPERCLUS = 13 ; 1
-OFS_BPB_RSVDSECCNT = 14 ; 2
-OFS_BPB_FATSZ32 = 36    ; 4
-OFS_BPB_ROOTCLUS = 44   ; 4
-; ディレクトリエントリオフセット
-OFS_DIR_ATTR = 11       ; 1
-OFS_DIR_FSTCLUSHI = 20  ; 2
-OFS_DIR_FSTCLUSLO = 26  ; 2
-OFS_DIR_FILESIZE = 28   ; 4
-; システム標識
-SYSTEMID_FAT32 = $0B
-SYSTEMID_FAT32NOCHS = $0C
-; ディレクトリエントリアトリビュート
-DIRATTR_DIRECTORY = $10
-DIRATTR_LONGNAME = $0F
-
 .SEGMENT "IPL"
 IPL_RESET:
+  LDX #0                  ; Setup Index X
+PRT_SEIZON:
+  LDA STR_IPLV,X
+  BEQ @EXT                 ; Branch if EQual(zeroflag=1 -> A=null byte)
+  JSR MON::PRT_CHAR_LCD
+  INX
+  BRA PRT_SEIZON
+@EXT:
   LDA #PORTA_OUTPUTPINS
   STA VIA::DDRA
   print STR_START
@@ -375,6 +358,7 @@ MESSAGES:
 .IFDEF DEBUGBUILD
   STR_CMD:     .BYTE $A,"CMD$",$0
 .ENDIF
+STR_IPLV:    .BYTE "IPL V.00",$0
 STR_START:   .BYTE $A,"IPL V.00",$A,$0
 STR_SDINIT:  .BYTE "SD:Init...",$0   ; この後に!?
 STR_OLDSD:   .BYTE "SD:Old",$A,$0
@@ -383,7 +367,7 @@ STR_SCFILE:  .BYTE "SearchFile:",$0  ; この後に!?
 STR_BTMOD:   .BYTE "Mode:",$0
 STR_BTLOAD:  .BYTE $A,"Load:",$0
 STR_BTJUMP:  .BYTE $A,"Jump:",$0
-STR_JUMPING: .BYTE $A,"Jumping...",$A,$0
+STR_JUMPING: .BYTE $A,"Jumping...",$A,$A,$0
 ;STR_RS:
 ;  .ASCIIZ $A,"Read sector addr : $"
 ;STR_S:
@@ -529,28 +513,6 @@ SD_RDR7:
 PRT_BYT_S:
   JSR MON::PRT_BYT
   JSR MON::PRT_S
-  RTS
-
-DUMPPAGE:
-  ; モニタにあってもいいコマンド
-  ; 範囲指定を追加するかが悩みどころ
-@LOOP:
-  JSR MON::PRT_LF
-  LDA ZP_GP0_VEC16+1
-  JSR MON::PRT_BYT
-  LDA ZP_GP0_VEC16
-  JSR MON::PRT_BYT
-  LDA #':'
-  JSR MON::PRT_CHAR_UART
-  LDX #16
-@LOOP2:
-  LDA (ZP_GP0_VEC16)
-  JSR PRT_BYT_S
-  INC ZP_GP0_VEC16
-  DEX
-  BNE @LOOP2
-  LDA ZP_GP0_VEC16
-  BNE @LOOP
   RTS
 
 DUMMYCLK:
@@ -919,7 +881,6 @@ CLUS2SEC:
   JSR L_X2
   TXA
   LSR
-  ;BBR0 @LOOP ; なぜアセンブルできない
   CMP #1
   BNE @LOOP
   ; DATSTARTを加算

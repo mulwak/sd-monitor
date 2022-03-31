@@ -40,7 +40,6 @@ XOFF = $13
   ;*=$F000
 .SEGMENT "SDMON"
 RESET:
-
 ; --- LCD初期化 ---
   LDA #%11111111  ; Set all pins on port B to output
   STA VIA::DDRB
@@ -96,22 +95,25 @@ RESET:
   CLD
   CLI
 
+JMP_IPL:
+  JMP IPL_RESET
+
 ; --- LCDにHelloWorld表示（生存確認） ---
+CTRL:
+  LDA #%00000001  ; Clear display
+  JSR LCD_INST
   LDX #0          ; Setup Index X
 PRT_SEIZON:
   LDA STR_MESSAGE,X
-  BEQ JMP_IPL        ; Branch if EQual(zeroflag=1 -> A=null byte)
+  BEQ @EXT        ; Branch if EQual(zeroflag=1 -> A=null byte)
   JSR PRT_CHAR_LCD
   INX
   BRA PRT_SEIZON
-
-JMP_IPL:
-  JMP IPL_RESET
+@EXT:
 
 ; *
 ; --- COMMAND CONTROL ---
 ; *
-CTRL:
   LDA #<STR_NEWLINE
   LDX #>STR_NEWLINE
   JSR PRT_STR
@@ -124,9 +126,13 @@ CTRL:
   CMP #'M'
   BEQ CHANGE
   CMP #'R'
-  BNE CTRL1
+  BNE @SKP_R
   JMP PRTREG
-CTRL1:
+@SKP_R:
+  CMP #'D'
+  BNE @SKP_D
+  JMP DUMPPAGE
+@SKP_D:
   CMP #'G'
   BNE CTRL
 
@@ -188,8 +194,7 @@ MODORU:
 ; *
 LOAD:
   JSR PRT_LF ; Lコマンド開始時改行
-  LDA #1
-  STA ECHO_F  ; エコーを切ったら速いかもしれない
+  STZ ECHO_F  ; エコーを切ったら速いかもしれない
 LOAD_CHECKTYPE:
   JSR INPUT_CHAR_UART
   CMP #'S'
@@ -402,8 +407,9 @@ INPUT_CHAR_UART:
   LDA INPUT_BF_BASE,X   ; バッファから読む、ここからRTSまでA使わない
   CMP #$0A              ;
   BEQ SKIP_ECHO         ; 改行文字はエコーしない方が融通が利く
-  BIT ECHO_F
-  BPL SKIP_ECHO         ; 設定に従う
+  ;BIT ECHO_F
+  ;BPL SKIP_ECHO         ; 設定に従う
+  BBR7 ECHO_F,SKIP_ECHO ; CMOS命令！
   JSR PRT_CHAR_UART     ; ECHO
 SKIP_ECHO:
   INC ZP_INPUT_BF_RD_P  ; 読み取りポインタ増加
@@ -531,6 +537,62 @@ EXIT_UART_IRQ:
   PLA
   CLI
   RTI
+
+DUMPPAGE:
+  ; モニタにあってもいいので追加したコマンド
+  ; 指定アドレスから256バイトを吐き出す
+  JSR BUILD_ADDR
+  LDY #16
+@LOOP:
+  ; アドレス表示部
+  JSR PRT_LF
+  LDA ADDR_INDEX_H
+  PHA
+  JSR PRT_BYT
+  LDA ADDR_INDEX_L
+  PHA
+  JSR PRT_BYT_S
+  LDA #':'
+  JSR PRT_CHAR_UART
+  LDX #16
+@BYTLOOP:
+  ; データ表示部
+  LDA (ADDR_INDEX_L)
+  JSR PRT_BYT_S
+  INC ADDR_INDEX_L
+  BNE @SKP_H
+  INC ADDR_INDEX_H
+@SKP_H:
+  DEX
+  BNE @BYTLOOP
+  LDX #16
+  PLA
+  STA ADDR_INDEX_L
+  PLA
+  STA ADDR_INDEX_H
+  ; テキスト表示部
+@ASCIILOOP:
+  LDA (ADDR_INDEX_L)
+  CMP #$20
+  BCS @SKP_20   ; 20以上
+  LDA #'.'
+@SKP_20:
+  CMP #$7F
+  BCC @SKP_7F   ; 7F未満
+  LDA #'.'
+@SKP_7F:
+  JSR PRT_CHAR_UART
+  INC ADDR_INDEX_L
+  BNE @SKP_H2
+  INC ADDR_INDEX_H
+@SKP_H2:
+  DEX
+  BNE @ASCIILOOP
+  DEY
+  BEQ @END
+  BRA @LOOP
+@END:
+  JMP CTRL
 
 ; *
 ; --- 割り込み処理 ---
