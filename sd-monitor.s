@@ -9,6 +9,7 @@
 ;     aAA xXX yYY fFF pPCPC sSS
 
 ; 変更履歴
+; V.03 令和04年04月01日 IPLの付属品とし、CA65をアセンブラとする
 ; V.02 令和03年12月05日 UART受信をリングバッファ式にして、ソフトフロー制御実装
 
 ; 略語統一
@@ -23,49 +24,9 @@
 
 .INCLUDE "FXT65.inc"
 
-; --- アドレス定義 ---
-
-; アプリケーションRAM領域（ゼロページ）
-.ZEROPAGE
-  ZR0:               .RES 2  ; Apple][のA1Lをまねた汎用レジスタ
-  ZR1:               .RES 2
-  ZR2:               .RES 2
-  ZR3:               .RES 2
-  ZR4:               .RES 2
-  ADDR_INDEX_L:      .RES 1  ; 各所で使うので専用
-  ADDR_INDEX_H:      .RES 1
-  ZP_INPUT_BF_WR_P:  .RES 1
-  ZP_INPUT_BF_RD_P:  .RES 1
-  ZP_INPUT_BF_LEN:   .RES 1
-  ECHO_F:            .RES 1  ; エコーフラグ
-
-; UART受信用リングバッファ
-.SEGMENT "ALIGN100VAR"
-INPUT_BF_BASE:.RES 256
-
-; モニタRAM領域
-.SEGMENT "MONVAR"
-  SP_SAVE:      .RES 1  ; BRK時の各レジスタのセーブ領域。
-  A_SAVE:       .RES 1
-  X_SAVE:       .RES 1
-  Y_SAVE:       .RES 1
-  ZR0_SAVE:     .RES 2
-  ZR1_SAVE:     .RES 2
-  ZR2_SAVE:     .RES 2
-  ZR3_SAVE:     .RES 2
-  ZR4_SAVE:     .RES 2
-  LOAD_CKSM:    .RES 1
-  LOAD_BYTCNT:  .RES 1
-  T1_IRQ_VEC:   .RES 2  ; 2byte アプリケーションが用意するタイマ割り込み処理のベクタ
-  UART_IRQ_VEC: .RES 2  ; 2byte アプリケーションによってとび先を変えられる、UART割り込み処理のベクタ
-
-; アプリケーションRAM領域
-APP_RAMBASE = $0400
-
 ; --- 定数定義 ---
 ; 使える設定集
 UARTCMD_WELLCOME = UART::CMD::RTS_ON|UART::CMD::DTR_ON
-;UARTCMD_WELLCOME = UART::CMD::RTS_ON|UART::CMD::DTR_ON|UART::CMD::RIRQ_OFF
 UARTCMD_BUSY = UART::CMD::DTR_ON
 UARTCMD_DOWN = UART::CMD::RIRQ_OFF
 
@@ -75,7 +36,6 @@ XON = $11
 XOFF = $13
 
 ; --- リセット ---
-
   ;.ORG $F000
   ;*=$F000
 .SEGMENT "SDMON"
@@ -692,10 +652,5 @@ PRTREG:  ; print contents of stack
   JMP CTRL
 
 STR_NEWLINE: .BYT $A,"*",$00
-STR_MESSAGE: .BYT "SD-Monitor  V.02","                        ","      for FxT-65",$00
-
-.SEGMENT "VECTORS"
-.WORD NMI
-.WORD RESET
-.WORD IRQ
+STR_MESSAGE: .BYT "SD-Monitor  V.03","                        ","      for FxT-65",$00
 
