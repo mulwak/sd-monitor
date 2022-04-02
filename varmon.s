@@ -1,8 +1,8 @@
 ; --- アドレス定義 ---
 .IMPORT __APP_RUN__
 
-; アプリケーションRAM領域（ゼロページ）
-.ZEROPAGE
+; モニタRAM領域（ゼロページ）
+.SEGMENT "MONZP":zeropage
   ZR0:               .RES 2  ; Apple][のA1Lをまねた汎用レジスタ
   ZR1:               .RES 2
   ZR2:               .RES 2
@@ -16,7 +16,7 @@
   ECHO_F:            .RES 1  ; エコーフラグ
 
 ; UART受信用リングバッファ
-.SEGMENT "BF100"
+.SEGMENT "MONBF100"
 INPUT_BF_BASE:  .RES 256
 
 ; モニタRAM領域

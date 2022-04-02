@@ -1,5 +1,5 @@
 ; --- アドレス
-.ZEROPAGE
+.SEGMENT "IPLZP":zeropage
   ZP_GP0_VEC16:         .RES 2
   ZP_SDCMDPRM_VEC16:    .RES 2      ; コマンド引数4バイトを指す。アドレスであることが多いか。
   ZP_SDSEEK_VEC16:      .RES 2      ; カードレベルのポインタ
@@ -53,6 +53,6 @@ DOT_SFN:            .RES 13 ; .とEOTを含んで13文字
   ; LDA (DRVSEL),Y           ; ドライブセレクタ変数に応じたアクセス
                              ; 4バイト変数へのアクセスが面倒だが仕方あるまい
   ; 普通に面倒なので別ドライブを扱うときはZ_にコピーすること
-.SEGMENT "BF100"
+.SEGMENT "IPLBF100"
 SECBF512: .RES 512
 
