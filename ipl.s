@@ -20,18 +20,19 @@ SD_SCK  = VIA::BPIN::SD_SCK
 SD_MOSI = VIA::BPIN::SD_MOSI
 SD_MISO = VIA::BPIN::SD_MISO
 
-PORTA_OUTPUTPINS = LCD_E|LCD_RW|LCD_RS|SD_CS|SD_SCK|SD_MOSI
+;PORTA_OUTPUTPINS = LCD_E|LCD_RW|LCD_RS|SD_CS|SD_SCK|SD_MOSI
+PORTA_OUTPUTPINS = SD_CS|SD_SCK|SD_MOSI
 
 .SEGMENT "IPL"
 IPL_RESET:
-  LDX #0                  ; Setup Index X
-PRT_SEIZON:
-  LDA STR_IPLV,X
-  BEQ @EXT                 ; Branch if EQual(zeroflag=1 -> A=null byte)
-  JSR MON::PRT_CHAR_LCD
-  INX
-  BRA PRT_SEIZON
-@EXT:
+;  LDX #0                  ; Setup Index X
+;PRT_SEIZON:
+;  LDA STR_IPLV,X
+;  BEQ @EXT                 ; Branch if EQual(zeroflag=1 -> A=null byte)
+;  JSR MON::PRT_CHAR_LCD
+;  INX
+;  BRA PRT_SEIZON
+;@EXT:
   LDA #PORTA_OUTPUTPINS
   STA VIA::DDRA
   print STR_START
@@ -351,8 +352,6 @@ OK:
   JSR MON::PRT_LF
   RTS
   RTS
-
-
 
 MESSAGES:
 .IFDEF DEBUGBUILD

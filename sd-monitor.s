@@ -41,28 +41,27 @@ XOFF = $13
 .SEGMENT "SDMON"
 RESET:
 ; --- LCD初期化 ---
-  LDA #%11111111  ; Set all pins on port B to output
-  STA VIA::DDRB
-  LDA #%11100000  ; Set top 3 pins on port A to output
-  STA VIA::DDRA
+;  LDA #%11111111  ; Set all pins on port B to output
+;  STA VIA::DDRB
+;  LDA #%11100000  ; Set top 3 pins on port A to output
+;  STA VIA::DDRA
 
-  LDA #%00111000  ; Set 8-bit mode; 2-line display; 5x8 font
-  JSR LCD_INST
-  LDA #%00001110  ; Set Display on; cursor on; blink off
-  JSR LCD_INST
-  LDA #%00000110  ; Increment and shift cursor; dont shift display
-  JSR LCD_INST
-  LDA #%00000001  ; Clear display
-  JSR LCD_INST
+;  LDA #%00111000  ; Set 8-bit mode; 2-line display; 5x8 font
+;  JSR LCD_INST
+;  LDA #%00001110  ; Set Display on; cursor on; blink off
+;  JSR LCD_INST
+;  LDA #%00000110  ; Increment and shift cursor; dont shift display
+;  JSR LCD_INST
+;  LDA #%00000001  ; Clear display
+;  JSR LCD_INST
 
 ; --- UART初期化 ---
-  LDA #$00
+  LDA #$00                ; ステータスへの書き込みはソフトリセットを意味する
   STA UART::STATUS
-  LDA #UARTCMD_WELLCOME
+  LDA #UARTCMD_WELLCOME   ; RTS_ON|DTR_ON
   STA UART::COMMAND
-  ; SBN/WL1/WL0/RSC/SBR3/SBR2/SBR1/SBR0
-  LDA #%00011011 ; 1stopbit,word=8bit,rx-rate=tx-rate,xl/512
-  STA UART::CONTROL
+  LDA #%00011011          ; 1stopbit,word=8bit,rx-rate=tx-rate,xl/512
+  STA UART::CONTROL       ; SBN/WL1/WL0/RSC/SBR3/SBR2/SBR1/SBR0
 
 ; --- UART受信リングバッファのリセット ---
   LDA #0
@@ -100,16 +99,16 @@ JMP_IPL:
 
 ; --- LCDにHelloWorld表示（生存確認） ---
 CTRL:
-  LDA #%00000001  ; Clear display
-  JSR LCD_INST
-  LDX #0          ; Setup Index X
-PRT_SEIZON:
-  LDA STR_MESSAGE,X
-  BEQ @EXT        ; Branch if EQual(zeroflag=1 -> A=null byte)
-  JSR PRT_CHAR_LCD
-  INX
-  BRA PRT_SEIZON
-@EXT:
+;  LDA #%00000001  ; Clear display
+;  JSR LCD_INST
+;  LDX #0          ; Setup Index X
+;PRT_SEIZON:
+;  LDA STR_MESSAGE,X
+;  BEQ @EXT        ; Branch if EQual(zeroflag=1 -> A=null byte)
+;  JSR PRT_CHAR_LCD
+;  INX
+;  BRA PRT_SEIZON
+;@EXT:
 
 ; *
 ; --- COMMAND CONTROL ---
@@ -460,47 +459,47 @@ DELAY_1:
 DELAY_DONE:
   RTS
 
-LCD_WAIT:
-  PHA             ; Push A
-  LDA #%00000000  ; Port B is input
-  STA VIA::DDRB
-LCDBUSY:
-  LDA #VIA::BPIN::LCD_RW
-  STA VIA::PORTA
-  LDA #(VIA::BPIN::LCD_RW | VIA::BPIN::LCD_E)
-  STA VIA::PORTA
-  LDA VIA::PORTB       ; Read data from LCD
-  AND #%10000000  ; if busy then %10000000 -> not zero -> zeroflag:0
-  BNE LCDBUSY     ; Branch if Not Equal(zeroflag=0)
-
-  LDA #VIA::BPIN::LCD_RW
-  STA VIA::PORTA
-  LDA #%11111111  ; Port B is output
-  STA VIA::DDRB
-  PLA             ; Pull A
-  RTS
-
-LCD_INST:
-  JSR LCD_WAIT
-  STA VIA::PORTB
-  LDA #0          ; Clear RS/RW/E bits
-  STA VIA::PORTA
-  LDA #VIA::BPIN::LCD_E          ; Enable up-down
-  STA VIA::PORTA
-  LDA #0          ; Clear (RS/RW)/E bits
-  STA VIA::PORTA
-  RTS
-
-PRT_CHAR_LCD:
-  JSR LCD_WAIT
-  STA VIA::PORTB
-  LDA #VIA::BPIN::LCD_RS         ; Only RegSelect HIGH
-  STA VIA::PORTA
-  LDA #(VIA::BPIN::LCD_RS | VIA::BPIN::LCD_E)   ; RegSelect and Enable HIGH
-  STA VIA::PORTA
-  LDA #VIA::BPIN::LCD_RS         ; Enable LOW
-  STA VIA::PORTA
-  RTS
+;LCD_WAIT:
+;  PHA             ; Push A
+;  LDA #%00000000  ; Port B is input
+;  STA VIA::DDRB
+;LCDBUSY:
+;  LDA #VIA::BPIN::LCD_RW
+;  STA VIA::PORTA
+;  LDA #(VIA::BPIN::LCD_RW | VIA::BPIN::LCD_E)
+;  STA VIA::PORTA
+;  LDA VIA::PORTB       ; Read data from LCD
+;  AND #%10000000  ; if busy then %10000000 -> not zero -> zeroflag:0
+;  BNE LCDBUSY     ; Branch if Not Equal(zeroflag=0)
+;
+;  LDA #VIA::BPIN::LCD_RW
+;  STA VIA::PORTA
+;  LDA #%11111111  ; Port B is output
+;  STA VIA::DDRB
+;  PLA             ; Pull A
+;  RTS
+;
+;LCD_INST:
+;  JSR LCD_WAIT
+;  STA VIA::PORTB
+;  LDA #0          ; Clear RS/RW/E bits
+;  STA VIA::PORTA
+;  LDA #VIA::BPIN::LCD_E          ; Enable up-down
+;  STA VIA::PORTA
+;  LDA #0          ; Clear (RS/RW)/E bits
+;  STA VIA::PORTA
+;  RTS
+;
+;PRT_CHAR_LCD:
+;  JSR LCD_WAIT
+;  STA VIA::PORTB
+;  LDA #VIA::BPIN::LCD_RS         ; Only RegSelect HIGH
+;  STA VIA::PORTA
+;  LDA #(VIA::BPIN::LCD_RS | VIA::BPIN::LCD_E)   ; RegSelect and Enable HIGH
+;  STA VIA::PORTA
+;  LDA #VIA::BPIN::LCD_RS         ; Enable LOW
+;  STA VIA::PORTA
+;  RTS
 
 NMI:
   RTI
@@ -605,8 +604,6 @@ IRQ:
   PHA ; まだXY使用禁止
 ; UART
   LDA UART::STATUS
-  ;ROL ; キャリーにIRQが
-  ;BCC CHECK_VIA_IRQ
   BIT #%00001000
   BEQ CHECK_VIA_IRQ ; bit3の論理積がゼロ、つまりフルじゃない
   JMP (UART_IRQ_VEC) ; ベクタに飛ぶ（デフォルトで設定されているが変更されうる）

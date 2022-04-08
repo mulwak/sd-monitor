@@ -24,6 +24,8 @@ ROMBASE = $F000
     RIRQ_OFF =  %00000010
     DTR_ON =    %00000001
   .ENDPROC
+  XON = $11
+  XOFF = $13
 .ENDPROC
 
 ; VIA
