@@ -39,16 +39,6 @@ ROMBASE = $F000
   PCR = VIABASE+$C
   IFR = VIABASE+$D
   IER = VIABASE+$E
-  .PROC BPIN
-    ; LCD PIN割り当て
-    LCD_E   = %10000000
-    LCD_RW  = %01000000
-    LCD_RS  = %00100000
-    SD_CS   = %00010000
-    SD_SCK  = %00001000
-    SD_MOSI = %00000100
-    SD_MISO = %00000010
-  .ENDPROC
   ; 新式
   SPI_INOUT  = %10000000  ; 1=in, 0=out
   SPI_CS0    = %01000000
