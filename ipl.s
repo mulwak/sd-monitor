@@ -6,35 +6,55 @@
 .INCLUDE "fscons.inc"
 .INCLUDE "generic.mac"
 
+.macro cs0high
+  LDA VIA::PORTB
+  ORA #VIA::SPI_CS0
+  STA VIA::PORTB
+.endmac
+
+.macro cs0low
+  LDA VIA::PORTB
+  AND #<~(VIA::SPI_CS0)
+  STA VIA::PORTB
+.endmac
+
+.macro spi_rdbyt
+  .local @LOOP
+  ; --- AにSPIで受信したデータを格納
+  ; 高速化マクロ
+@LOOP:
+  LDA VIA::IFR
+  AND #%00000100      ; シフトレジスタ割り込みを確認
+  BEQ @LOOP
+  LDA VIA::SR
+.endmac
+
+.macro rdpage
+  ; 高速化マクロ
+.local @RDLOOP
+  LDY #0
+@RDLOOP:
+  spi_rdbyt
+  STA (ZP_SDSEEK_VEC16),Y
+  INY
+  BNE @RDLOOP
+.endmac
+
 ; 命名規則
 ; BYT  8bit
 ; SHORT 16bit
 ; LONG  32bit
 
-; --- 定数
-LCD_E   = VIA::BPIN::LCD_E
-LCD_RW  = VIA::BPIN::LCD_RW
-LCD_RS  = VIA::BPIN::LCD_RS
-SD_CS   = VIA::BPIN::SD_CS
-SD_SCK  = VIA::BPIN::SD_SCK
-SD_MOSI = VIA::BPIN::SD_MOSI
-SD_MISO = VIA::BPIN::SD_MISO
-
-;PORTA_OUTPUTPINS = LCD_E|LCD_RW|LCD_RS|SD_CS|SD_SCK|SD_MOSI
-PORTA_OUTPUTPINS = SD_CS|SD_SCK|SD_MOSI
-
 .SEGMENT "IPL"
 IPL_RESET:
-;  LDX #0                  ; Setup Index X
-;PRT_SEIZON:
-;  LDA STR_IPLV,X
-;  BEQ @EXT                 ; Branch if EQual(zeroflag=1 -> A=null byte)
-;  JSR MON::PRT_CHAR_LCD
-;  INX
-;  BRA PRT_SEIZON
-;@EXT:
-  LDA #PORTA_OUTPUTPINS
+  ; VIAのリセット
+  LDA #$FF  ; 全GPIOを出力に
   STA VIA::DDRA
+  STA VIA::DDRB
+  LDA #%01111111
+  STA VIA::IER
+  STA VIA::IFR
+
   print STR_START
   JSR SD_INIT
   JSR DRV_INIT
@@ -122,6 +142,7 @@ ETM_DIR_OPEN_BYNAME:
   JMP MON::HATENA
 @SKP_HATENA:
   JSR OK
+  RTS
 
 ;  BRA .A
 ;
@@ -221,7 +242,13 @@ SD_RDSEC:
   ; --- SDCMD_BF+1+2+3+4を引数としてCMD17を実行し、1セクタを読み取る
   ; --- 結果はZP_SDSEEK_VEC16の示す場所に保存される
   JSR SD_RDINIT
-  JSR SD_DUMPSEC
+SD_DUMPSEC:
+  ; 512バイト読み取り
+  rdpage
+  INC ZP_SDSEEK_VEC16+1
+  rdpage
+  ; コマンド終了
+  cs0high
   RTS
 
 SD_RDINIT:
@@ -236,38 +263,33 @@ SD_RDINIT:
   BRK
 @RDSUCCESS:
   ;print STR_S
-  JSR SD_WAITRES  ; データを待つ
+  cs0low
+  ;JSR SD_WAITRES  ; データを待つ
+  LDY #0
+@WAIT_DAT:         ;  有効トークン$FEは、負数だ
+  JSR SPI_RDBYT
+  CMP #$FF
+  BNE @TOKEN
+  DEY
+  BNE @WAIT_DAT
+@TOKEN:
   CMP #$FE
   BEQ @RDGOTDAT
   BRK
+  ;BRA @RDSUCCESS ; その後の推移を確認
 @RDGOTDAT:
   RTS
 
-SD_DUMPSEC:
-  ; 512バイト読み取り
-  JSR RDPAGE
-  INC ZP_SDSEEK_VEC16+1
-  JSR RDPAGE
-  ; コマンド終了
-  LDA #SD_CS|SD_MOSI
-  STA VIA::PORTA
-  ;DEC ZP_SDSEEK_VEC16+1
-  RTS
-
 RDPAGE:
-  LDY #0
-@RDLOOP:
-  PHY
-  JSR SD_RDBYT
-  PLY
-  STA (ZP_SDSEEK_VEC16),Y
-  INY
-  BNE @RDLOOP
+  rdpage
   RTS
 
 SD_INIT:
-  LDX #(80*2)
-  JSR DUMMYCLK  ; 80回のダミークロック
+  ; カードを選択しないままダミークロック
+  LDA #VIA::SPI_CS0
+  STA VIA::PORTB
+  LDX #10         ; 80回のダミークロック
+  JSR SPI_DUMMYCLK
 
 @CMD0:
 ; GO_IDLE_STATE
@@ -306,7 +328,7 @@ SD_INIT:
 @CMD58:
 ; READ_OCR
 ; OCRレジスタを読み取る
-  LDA #1        ; 以降CRCは触れなくてよい
+  LDA #$81        ; 以降CRCは触れなくてよい
   STA SDCMD_CRC
   loadmem16 ZP_SDCMDPRM_VEC16,BTS_CMDPRM_ZERO
   LDA #58|SD_STBITS
@@ -351,7 +373,6 @@ OK:
   JSR MON::PRT_CHAR_UART
   JSR MON::PRT_LF
   RTS
-  RTS
 
 MESSAGES:
 .IFDEF DEBUGBUILD
@@ -383,60 +404,6 @@ BTS_CMDPRM_ZERO:  ; 00 00 00 00
 BTS_CMD41PRM:  ; 40 00 00 00
   .BYTE $00,$00,$00,$40
 
-SD_RDBYT:
-  ; --- カードを有効化して、MOSIハイの状態で8クロック
-  ; --- MISOを得て返す
-  LDX #8  ; シリアル8bit
-@LOOP:
-  ; クロック下げ↓
-  LDA #SD_MOSI
-  STA VIA::PORTA
-  ; クロック上げ↑
-  LDA #SD_MOSI|SD_SCK
-  STA VIA::PORTA
-  ; データ受信
-  LDA VIA::PORTA
-  AND #SD_MISO
-  ; MISO入力をキャリーに反映する
-  CLC
-  BEQ @BITNOTSET
-  SEC
-@BITNOTSET:
-  ; Yレジスタに結果を更新
-  TYA
-  ROL
-  TAY
-  DEX
-  BNE @LOOP
-  RTS
-
-SD_WRBYT:
-  ; MOSIからデータを送るために8クロック
-  ; 受信は無視する
-  LDX #8
-@LOOP:
-  ; 次のビットをキャリーに格納する
-  ASL
-  TAY
-  LDA #0
-  BCC @SENDBIT
-  ORA #SD_MOSI
-@SENDBIT:
-  STA VIA::PORTA
-  EOR #SD_SCK
-  STA VIA::PORTA
-  TYA
-  DEX
-  BNE @LOOP
-  RTS
-
-SD_WAITRES:
-  ; --- SDカードが$FF以外の何かを返すのを待つ
-  JSR SD_RDBYT
-  CMP #$FF
-  BEQ SD_WAITRES
-  RTS
-
 SD_SENDCMD:
   ; ZP_SDCMD_VEC16の示すところに配置されたコマンド列を送信する
   ; Aのコマンド、ZP_SDCMDPRM_VEC16のパラメータ、SDCMD_CRCをコマンド列として送信する。
@@ -452,11 +419,11 @@ SD_SENDCMD:
 .ENDIF
 
   ; コマンド開始
-  LDA #SD_MOSI ; CSロー
-  STA VIA::PORTA
+  cs0low
+  JSR SPI_SETOUT
   ; コマンド送信
   PLA
-  JSR SD_WRBYT
+  JSR SPI_WRBYT
   ; 引数送信
   LDY #3
 @LOOP:
@@ -465,7 +432,7 @@ SD_SENDCMD:
   PHY
   ; 引数表示
   PHA
-  JSR SD_WRBYT
+  JSR SPI_WRBYT
   PLA
 .IFDEF DEBUGBUILD
   JSR PRT_BYT_S
@@ -476,7 +443,7 @@ SD_SENDCMD:
   BPL @LOOP
   ; CRC送信
   LDA SDCMD_CRC
-  JSR SD_WRBYT
+  JSR SPI_WRBYT
 
 .IFDEF DEBUGBUILD
   ; レス表示
@@ -491,37 +458,31 @@ SD_SENDCMD:
   JSR PRT_BYT_S
 .ENDIF
 
-  LDA #SD_CS|SD_MOSI ; CSハイ
-  STA VIA::PORTA
-  LDX #(8*2)
-  JSR DUMMYCLK  ; ダミークロック1バイト
+  cs0high
+
+  LDX #1
+  JSR SPI_DUMMYCLK  ; ダミークロック1バイト
+  JSR SPI_SETIN
   PLA
   RTS
 
 SD_RDR7:
-  JSR SD_RDBYT
+  ; ダミークロックを入れた関係でうまく読めない
+  cs0low
+  JSR SPI_RDBYT
   ;JSR PRT_BYT_S
-  JSR SD_RDBYT
+  JSR SPI_RDBYT
   ;JSR PRT_BYT_S
-  JSR SD_RDBYT
+  JSR SPI_RDBYT
   ;JSR PRT_BYT_S
-  JSR SD_RDBYT
+  JSR SPI_RDBYT
   ;JSR MON::PRT_BYT
+  cs0high
   RTS
 
 PRT_BYT_S:
   JSR MON::PRT_BYT
   JSR MON::PRT_S
-  RTS
-
-DUMMYCLK:
-  ; X/2回のダミークロックを送信する
-  LDA #SD_CS|SD_MOSI
-@LOOP:
-  EOR #SD_SCK
-  STA VIA::PORTA
-  DEX
-  BNE @LOOP
   RTS
 
 EQBYTS:
@@ -757,9 +718,9 @@ FILE_RDWORD:
   loadmem16 ZP_SDCMDPRM_VEC16,FILE::REAL_SEC
   JSR SD_RDINIT
 @SKP_RDCMD:
-  JSR SD_RDBYT
+  JSR SPI_RDBYT
   PHA
-  JSR SD_RDBYT
+  JSR SPI_RDBYT
   TAX
   PLA
   DEC DRV::SEC_RESWORD
@@ -775,13 +736,12 @@ FILE_RDWORD:
 
 FILE_THROWSEC:
   ; RDBYTを抜ける
-  JSR SD_RDBYT
-  JSR SD_RDBYT
+  JSR SPI_RDBYT
+  JSR SPI_RDBYT
   DEC DRV::SEC_RESWORD
   BNE FILE_THROWSEC
   ; コマンド終了
-  LDA #SD_CS|SD_MOSI
-  STA VIA::PORTA
+  cs0high
   RTS
 
 FILE_SETSIZ:
@@ -840,9 +800,7 @@ FILE_DLFULL:
 @RDLOOP:
   CPY FILE::RES_SIZ
   BEQ @SKP_PBYT
-  PHY
-  JSR SD_RDBYT
-  PLY
+  spi_rdbyt
   STA (ZP_SDSEEK_VEC16),Y
   INY
   BRA @RDLOOP
@@ -858,7 +816,6 @@ FILE_DLFULL:
   JSR FILE_THROWSEC
 @END:
   RTS
-
 
 ;CLUS2SEC_AXD:
   ; 作業するDSTをAX指定
@@ -1130,6 +1087,71 @@ DELAY:
 @LOOP:
   DEY
   BNE @LOOP
+  DEX
+  BNE @LOOP
+  RTS
+
+SD_WAITRES:
+  ; --- SDカードが負数を返すのを待つ
+  ; --- 負数でエラー
+  JSR SPI_SETIN
+  LDX #8
+@RETRY:
+  JSR SPI_RDBYT ; なぜか、直前に送ったCRCが帰ってきてしまう
+.IFDEF DEBUGBUILD
+  PHA
+  JSR PRT_BYT_S
+  PLA
+.ENDIF
+  BPL @RETURN   ; bit7が0ならレス始まり
+  DEX
+  BNE @RETRY
+@RETURN:
+  ;STA SD_CMD_DAT ; ?
+  RTS
+
+SPI_SETIN:
+  ; --- SPIシフトレジスタを入力（MISO）モードにする
+  LDA VIA::ACR      ; シフトレジスタ設定の変更
+  AND #%11100011    ; bit 2-4がシフトレジスタの設定なのでそれをマスク
+  ORA #%00001000    ; PHI2制御下インプット
+  STA VIA::ACR
+  LDA VIA::PORTB
+  ORA #(VIA::SPI_INOUT) ; INOUT=1で入力モード
+  STA VIA::PORTB
+  RTS
+
+SPI_SETOUT:
+  ; --- SPIシフトレジスタを出力（MOSI）モードにする
+  LDA VIA::ACR      ; シフトレジスタ設定の変更
+  AND #%11100011    ; bit 2-4がシフトレジスタの設定なのでそれをマスク
+  ORA #%00011000    ; PHI2制御下出力
+  STA VIA::ACR
+  LDA VIA::PORTB
+  AND #<~(VIA::SPI_INOUT)
+  STA VIA::PORTB
+  RTS
+
+SPI_WRBYT:
+  ; --- Aを送信
+  STA VIA::SR
+@WAIT:
+  LDA VIA::IFR
+  AND #%00000100      ; シフトレジスタ割り込みを確認
+  BEQ @WAIT
+  RTS
+
+SPI_RDBYT:
+  ; --- AにSPIで受信したデータを格納
+  spi_rdbyt
+  RTS
+
+SPI_DUMMYCLK:
+  ; --- X回のダミークロックを送信する
+  JSR SPI_SETOUT
+@LOOP:
+  LDA #$FF
+  JSR SPI_WRBYT
   DEX
   BNE @LOOP
   RTS
