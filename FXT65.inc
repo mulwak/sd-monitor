@@ -1,7 +1,5 @@
 ; FxT65のハードウェア構成を定義する
 
-.PC02 ; CMOS命令を許可
-
 RAMBASE = $0000
 UARTBASE = $E000
 VIABASE = $E200
@@ -40,7 +38,13 @@ ROMBASE = $F000
   IFR = VIABASE+$D
   IER = VIABASE+$E
   ; 新式
+  SPI_REG    = PORTB
+  SPI_DDR    = DDRB
   SPI_INOUT  = %10000000  ; 1=in, 0=out
   SPI_CS0    = %01000000
+  PS2_REG    = PORTB
+  PS2_DDR    = DDRB
+  PS2_CLK    = %00100000
+  PS2_DAT    = %00010000
 .ENDPROC
 

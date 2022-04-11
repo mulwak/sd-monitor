@@ -1,10 +1,7 @@
 .PROC IPL
-  .INCLUDE "mmcdrv.s"
+  .INCLUDE "rompac.s"
 .ENDPROC
 
-.ZEROPAGE
-
-.SEGMENT "PREAPP"
 .SEGMENT "APP"
   LDA #<STR_HELLO
   LDX #>STR_HELLO
