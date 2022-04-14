@@ -1,5 +1,7 @@
 ; FxT65のハードウェア構成を定義する
 
+.PC02 ; CMOS命令を許可
+
 RAMBASE = $0000
 UARTBASE = $E000
 VIABASE = $E200
