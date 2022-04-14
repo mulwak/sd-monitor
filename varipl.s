@@ -1,19 +1,4 @@
-; --- アドレス
-.SEGMENT "IPLZP":zeropage
-  ZP_GP0_VEC16:         .RES 2
-  ZP_SDCMDPRM_VEC16:    .RES 2      ; コマンド引数4バイトを指す。アドレスであることが多いか。
-  ZP_SDSEEK_VEC16:      .RES 2      ; カードレベルのポインタ
-  ZP_LSRC0_VEC16:       .RES 2      ; ソースとディスティネーション。32bit演算用
-  ZP_LDST0_VEC16:       .RES 2
-  ZP_GP1_VEC16:         .RES 2
-  ZP_SWORK0_VEC16:      .RES 2
-
 ; --- 変数領域定義
-.SEGMENT "MONVAR"
-SDCMD_CRC:          .RES 1
-SECVEC32:           .RES 4  ; 4バイト セクタアドレス指定汎用
-BOOT_LOAD_POINT:    .RES 2
-BOOT_ENTRY_POINT:   .RES 2
 .PROC DRV
   ; 各ドライブ用変数
   BPB_SECPERCLUS:   .RES 1  ; いらないのにデフォルト値が必須
@@ -45,6 +30,10 @@ BOOT_ENTRY_POINT:   .RES 2
 .ENDPROC
 RAW_SFN:            .RES 11 ; 11文字
 DOT_SFN:            .RES 13 ; .とEOTを含んで13文字
+SDCMD_CRC:          .RES 1
+SECVEC32:           .RES 4  ; 4バイト セクタアドレス指定汎用
+BOOT_LOAD_POINT:    .RES 2
+BOOT_ENTRY_POINT:   .RES 2
 
 ; プログラム例
   ; LDA A_+DRV::OFS_PT_LBAOFS ; 変数領域を指すラベルに、構造体内部オフセットを加算してアクセス
@@ -54,5 +43,4 @@ DOT_SFN:            .RES 13 ; .とEOTを含んで13文字
                              ; 4バイト変数へのアクセスが面倒だが仕方あるまい
   ; 普通に面倒なので別ドライブを扱うときはZ_にコピーすること
 .SEGMENT "IPLBF100"
-SECBF512: .RES 512
 

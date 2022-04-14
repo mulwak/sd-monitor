@@ -22,6 +22,10 @@
 ; RD=READ
 ; WR=WRITE
 
+; アプリケーションRAM領域
+.IMPORT __APP_RUN__
+APP_RAMBASE = __APP_RUN__
+
 .INCLUDE "FXT65.inc"
 
 ; --- 定数定義 ---
@@ -38,7 +42,6 @@ XOFF = $13
 ; --- リセット ---
   ;.ORG $F000
   ;*=$F000
-.SEGMENT "SDMON"
 RESET:
 ; --- LCD初期化 ---
 ;  LDA #%11111111  ; Set all pins on port B to output

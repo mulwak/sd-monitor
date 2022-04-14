@@ -45,7 +45,6 @@
 ; SHORT 16bit
 ; LONG  32bit
 
-.SEGMENT "IPL"
 IPL_RESET:
   ; VIAのリセット
   LDA #$FF  ; 全GPIOを出力に
