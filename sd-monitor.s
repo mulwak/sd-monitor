@@ -9,6 +9,7 @@
 ;     aAA xXX yYY fFF pPCPC sSS
 
 ; 変更履歴
+; V.03 令和04年04月19日 割り込みを完全に移譲できるようにし、NMIを起動トリガに
 ; V.03 令和04年04月01日 IPLの付属品とし、CA65をアセンブラとする
 ; V.02 令和03年12月05日 UART受信をリングバッファ式にして、ソフトフロー制御実装
 
@@ -63,7 +64,7 @@ RESET:
   STA UART::STATUS
   LDA #UARTCMD_WELLCOME   ; RTS_ON|DTR_ON
   STA UART::COMMAND
-  LDA #%00011011          ; 1stopbit,word=8bit,rx-rate=tx-rate,xl/512
+  LDA #%00011101          ; 1stopbit,word=8bit,rx-rate=tx-rate,xl/256
   STA UART::CONTROL       ; SBN/WL1/WL0/RSC/SBR3/SBR2/SBR1/SBR0
 
 ; --- UART受信リングバッファのリセット ---
@@ -74,10 +75,10 @@ RESET:
 
 ; --- デフォルトベクタ設定 ---
 ; UART割り込み処理
-  LDA #<IRQ_UART
-  STA UART_IRQ_VEC
-  LDA #>IRQ_UART
-  STA UART_IRQ_VEC+1
+  LDA #<IRQ_ROM
+  STA IRQ_VEC16
+  LDA #>IRQ_ROM
+  STA IRQ_VEC16+1
 
 ; --- スタックの初期化 --
   LDX #STACK
@@ -441,7 +442,6 @@ SHORTDELAY:
   PLX
   RTS
 
-
 ; print A reg to UART
 PRT_CHAR_UART:
   STA UART::TX
@@ -503,9 +503,6 @@ DELAY_DONE:
 ;  LDA #VIA::BPIN::LCD_RS         ; Enable LOW
 ;  STA VIA::PORTA
 ;  RTS
-
-NMI:
-  RTI
 
 ; *
 ; --- UART割り込み処理 ---
@@ -602,33 +599,39 @@ DUMPPAGE:
 ; *
 IRQ:
   SEI ; RTI前に必ず切ること
+  JMP (IRQ_VEC16) ; ベクタに飛ぶ（デフォルトで設定されているが変更されうる）
 
+IRQ_ROM:
+; --- ROM独自の割り込みハンドラ ---
 ; --- 外部割込み判別 ---
   PHA ; まだXY使用禁止
 ; UART
   LDA UART::STATUS
   BIT #%00001000
-  BEQ CHECK_VIA_IRQ ; bit3の論理積がゼロ、つまりフルじゃない
-  JMP (UART_IRQ_VEC) ; ベクタに飛ぶ（デフォルトで設定されているが変更されうる）
+  BEQ IRQ_DEBUG ; bit3の論理積がゼロ、つまりフルじゃない
+  JMP IRQ_UART  ; ベクタに飛ぶ（デフォルトで設定されているが変更されうる）
 ; VIA
-CHECK_VIA_IRQ:
-  LDA VIA::IFR ; 割り込みフラグレジスタ読み取り
-  ROL ; キャリーにIRQが
-  ROL ; キャリーにTIMER1が
-  BCC IRQ_DEBUG ; TIMER1割り込みじゃないならとりあえず無視
-  JMP (T1_IRQ_VEC) ; 所定のベクトルにタイマー割り込み（アプリケーションですきにしてよい）
+;CHECK_VIA_IRQ:
+;  LDA VIA::IFR ; 割り込みフラグレジスタ読み取り
+;  ROL ; キャリーにIRQが
+;  ROL ; キャリーにTIMER1が
+;  BCC IRQ_DEBUG ; TIMER1割り込みじゃないならとりあえず無視
+;  JMP (T1_IRQ_VEC) ; 所定のベクトルにタイマー割り込み（アプリケーションですきにしてよい）
 
-; --- モニタに落ちる ---
 IRQ_DEBUG:
+; --- モニタに落ちる ---
   PLA
+NMI:
+  ; 押しボタン
+  SEI
   STA A_SAVE
   STX X_SAVE
   STY Y_SAVE
-  LDA ZR0
+  LDX #10
+  LDA ZR0,X
   STA ZR0_SAVE
   LDA ZR0+1
   STA ZR0_SAVE+1
-  ; ここでZR1～A5Hを退避（サボってる）
   TSX
   STX SP_SAVE ; save targets stack poi
 
@@ -715,5 +718,5 @@ PRTREG:  ; print contents of stack
   JMP CTRL
 
 STR_NEWLINE: .BYT $A,"*",$00
-STR_MESSAGE: .BYT "SD-Monitor  V.03","                        ","      for FxT-65",$00
+STR_MESSAGE: .BYT "SD-Monitor  V.04","                        ","      for FxT-65",$00
 
