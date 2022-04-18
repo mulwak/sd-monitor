@@ -50,3 +50,27 @@ ROMBASE = $F000
   PS2_DAT    = %00010000
 .ENDPROC
 
+; ChDz
+.PROC CRTC
+  CFG = CRTCBASE+$1   ; コンフィグ
+                          ;   MD0 MD1 MD2 MD3 - - - WCUE
+                          ;   MD : 色モード選択（各フレーム）
+                          ;   WCUE  : 書き込みカウントアップ有効化
+
+  VMAH = CRTCBASE+$2  ; VRAM書き込みアドレス下位
+                          ;   - 6 5 4 3 2 1 0
+
+  VMAV = CRTCBASE+$3  ; VRAM書き込みアドレス上位
+                      ;   7 6 5 4 3 2 1 0
+
+  WDBF = CRTCBASE+$4  ; 書き込みデータ
+
+  RF  = CRTCBASE+$5   ; 出力フレーム選択
+                      ;   (0) 1 0 | (1) 1 0 | (2) 1 0 | (3) 1 0
+
+  WF  = CRTCBASE+$6   ; 書き込みフレーム選択
+                      ;   - - - - - - WF1 WF0
+
+  TCP  = CRTCBASE+$7  ; 2色モード色選択
+                          ;   (0) 3 2 1 0 | (1) 3 2 1 0
+.ENDPROC

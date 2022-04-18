@@ -21,6 +21,12 @@
   LDX #>(cons)
 .endmac
 
+; Aに低位、Yに上位をロードする
+.macro loadAY16 cons
+  LDA #<(cons)
+  LDY #>(cons)
+.endmac
+
 .macro print  str_p
   loadreg16 str_p
   JSR MON::PRT_STR
