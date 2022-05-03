@@ -144,11 +144,12 @@ CTRL:
   LDX SP_SAVE
   TXS
 ; 汎用ZP復帰
-  LDA ZR0_SAVE
-  STA ZR0
-  LDA ZR0_SAVE+1
-  STA ZR0+1
-  ; ここでZR1～A5Hを復帰（サボってる）
+  LDX #12-1
+@LOADZRLOOP:
+  LDA ZR0,X
+  STA ZR0_SAVE,X
+  DEX
+  BPL @LOADZRLOOP
 ; レジスタ復帰
   LDA A_SAVE
   LDX X_SAVE
@@ -627,11 +628,12 @@ NMI:
   STA A_SAVE
   STX X_SAVE
   STY Y_SAVE
-  LDX #10
+  LDX #12-1
+@STOREZRLOOP:     ; ゼロページレジスタを退避
   LDA ZR0,X
-  STA ZR0_SAVE
-  LDA ZR0+1
-  STA ZR0_SAVE+1
+  STA ZR0_SAVE,X
+  DEX
+  BPL @STOREZRLOOP
   TSX
   STX SP_SAVE ; save targets stack poi
 
