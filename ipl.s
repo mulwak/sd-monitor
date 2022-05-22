@@ -1,44 +1,18 @@
-;DEBUGBUILD:
 ; https://github.com/gfoot/sdcard6502/blob/master/src/1_readwritebyte.s
 ; MON::でモニタにアクセスできること。
+IPLDEBUG = 1
 
 .INCLUDE "FXT65.inc"
 .INCLUDE "fscons.inc"
 .INCLUDE "generic.mac"
+.INCLUDE "fsmac.mac"
 
-.macro cs0high
-  LDA VIA::PORTB
-  ORA #VIA::SPI_CS0
-  STA VIA::PORTB
-.endmac
-
-.macro cs0low
-  LDA VIA::PORTB
-  AND #<~(VIA::SPI_CS0)
-  STA VIA::PORTB
-.endmac
-
-.macro spi_rdbyt
-  .local @LOOP
-  ; --- AにSPIで受信したデータを格納
-  ; 高速化マクロ
-@LOOP:
-  LDA VIA::IFR
-  AND #%00000100      ; シフトレジスタ割り込みを確認
-  BEQ @LOOP
-  LDA VIA::SR
-.endmac
-
-.macro rdpage
-  ; 高速化マクロ
-.local @RDLOOP
-  LDY #0
-@RDLOOP:
-  spi_rdbyt
-  STA (ZP_SDSEEK_VEC16),Y
-  INY
-  BNE @RDLOOP
-.endmac
+.PROC SPI
+  .INCLUDE "spi.s"
+.ENDPROC
+.PROC SD
+  .INCLUDE "sd.s"
+.ENDPROC
 
 ; 命名規則
 ; BYT  8bit
@@ -55,7 +29,7 @@ IPL_RESET:
   STA VIA::IFR
 
   print STR_START
-  JSR SD_INIT
+  JSR SD::INIT
   JSR DRV_INIT
 
 BOOT:
@@ -140,44 +114,14 @@ ETM_DIR_OPEN_BYNAME:
   BNE @SKP_HATENA
   JMP MON::HATENA
 @SKP_HATENA:
-  JSR OK
+  JSR SD::OK
   RTS
-
-;  BRA .A
-;
-;  ; 任意クラスタ読み取り
-;.LOOP
-;  print STR_RS
-;
-;  JSR MON::INPUT_BYT
-;  STA SECVEC32+3
-;  JSR MON::INPUT_BYT
-;  STA SECVEC32+2
-;  JSR MON::INPUT_BYT
-;  STA SECVEC32+1
-;  JSR MON::INPUT_BYT
-;  STA SECVEC32
-;.B
-;  JSR CLUS2SEC
-;  loadmem16 ZP_SDCMDPRM_VEC16,SECVEC32
-;  loadmem16 ZP_SDSEEK_VEC16,SECBF512
-;  JSR SD_RDSEC
-;.A
-;  JSR .SHOWSEC
-;  BRA .LOOP
-;
-;.SHOWSEC
-;  loadmem16 ZP_GP0_VEC16,SECBF512
-;  JSR DUMPPAGE
-;  INC ZP_GP0_VEC16+1
-;  JSR DUMPPAGE
-;  RTS
 
 DRV_INIT:
   ; MBRを読む
-  loadmem16 ZP_SDCMDPRM_VEC16,BTS_CMDPRM_ZERO
+  loadmem16 ZP_SDCMDPRM_VEC16,SD::BTS_CMDPRM_ZERO
   loadmem16 ZP_SDSEEK_VEC16,SECBF512
-  JSR SD_RDSEC
+  JSR SD::RDSEC
   ;INC ZP_SDSEEK_VEC16+1    ; 後半にこそある。しかしこれも一般的サブルーチンによるべきか？
   LDY #(OFS_MBR_PARTBL-256+OFS_PT_SYSTEMID)
   LDA (ZP_SDSEEK_VEC16),Y ; システム標識
@@ -198,7 +142,7 @@ DRV_INIT:
   ; BPBを読む
   loadmem16 ZP_SDCMDPRM_VEC16,(DRV::PT_LBAOFS)
   DEC ZP_SDSEEK_VEC16+1
-  JSR SD_RDSEC
+  JSR SD::RDSEC
   DEC ZP_SDSEEK_VEC16+1
   ; DRV::SEVPERCLUS取得
   LDY #(OFS_BPB_SECPERCLUS)
@@ -237,148 +181,8 @@ DRV_INIT:
   JSR L_LD_AXS
   RTS
 
-SD_RDSEC:
-  ; --- SDCMD_BF+1+2+3+4を引数としてCMD17を実行し、1セクタを読み取る
-  ; --- 結果はZP_SDSEEK_VEC16の示す場所に保存される
-  JSR SD_RDINIT
-SD_DUMPSEC:
-  ; 512バイト読み取り
-  rdpage
-  INC ZP_SDSEEK_VEC16+1
-  rdpage
-  ; コマンド終了
-  cs0high
-  RTS
-
-SD_RDINIT:
-  ; CMD17
-  LDA #17|SD_STBITS
-  JSR SD_SENDCMD
-  CMP #$00
-  BEQ @RDSUCCESS
-  CMP #$04          ; この例が多い
-  JSR DELAY
-  BEQ SD_RDINIT
-  BRK
-@RDSUCCESS:
-  ;print STR_S
-  cs0low
-  ;JSR SD_WAITRES  ; データを待つ
-  LDY #0
-@WAIT_DAT:         ;  有効トークン$FEは、負数だ
-  JSR SPI_RDBYT
-  CMP #$FF
-  BNE @TOKEN
-  DEY
-  BNE @WAIT_DAT
-@TOKEN:
-  CMP #$FE
-  BEQ @RDGOTDAT
-  BRK
-  ;BRA @RDSUCCESS ; その後の推移を確認
-@RDGOTDAT:
-  RTS
-
-RDPAGE:
-  rdpage
-  RTS
-
-SD_INIT:
-  ; カードを選択しないままダミークロック
-  LDA #VIA::SPI_CS0
-  STA VIA::PORTB
-  LDX #10         ; 80回のダミークロック
-  JSR SPI_DUMMYCLK
-
-@CMD0:
-; GO_IDLE_STATE
-; ソフトウェアリセットをかけ、アイドル状態にする。SPIモードに突入する。
-; CRCが有効である必要がある
-  loadmem16 ZP_SDCMDPRM_VEC16,BTS_CMDPRM_ZERO
-  LDA #SDCMD0_CRC
-  STA SDCMD_CRC
-  LDA #0|SD_STBITS
-  JSR SD_SENDCMD
-  CMP #$01        ; レスが1であると期待（In Idle Stateビット）
-  BNE @INITFAILED
-
-@CMD8:
-; SEND_IF_COND
-; カードの動作電圧の確認
-; CRCはまだ有効であるべき
-; SDHC（SD Ver.2.00）以降追加されたコマンドらしい
-  loadmem16 ZP_SDCMDPRM_VEC16,BTS_CMD8PRM
-  LDA #SDCMD8_CRC
-  STA SDCMD_CRC
-  LDA #8|SD_STBITS
-  JSR SD_SENDCMD
-  CMP #$05
-  BNE @SKP_OLDSD
-  print STR_OLDSD ; Ver.1.0カード
-  BRA @INITFAILED
-@SKP_OLDSD:
-  CMP #$01
-  BNE @INITFAILED
-  print STR_NEWSD ; Ver.2.0カード
-  ; CMD8のR7レスを受け取る
-  JSR SD_RDR7
-@SKP_R7:
-
-@CMD58:
-; READ_OCR
-; OCRレジスタを読み取る
-  LDA #$81        ; 以降CRCは触れなくてよい
-  STA SDCMD_CRC
-  loadmem16 ZP_SDCMDPRM_VEC16,BTS_CMDPRM_ZERO
-  LDA #58|SD_STBITS
-  JSR SD_SENDCMD
-  JSR SD_RDR7
-
-@CMD55:
-; APP_CMD
-; アプリケーション特化コマンド
-; ACMDコマンドのプレフィクス
-  loadmem16 ZP_SDCMDPRM_VEC16,BTS_CMDPRM_ZERO
-  LDA #55|SD_STBITS
-  JSR SD_SENDCMD
-  CMP #$01
-  BNE @INITFAILED
-
-@CMD41:
-; APP_SEND_OP_COND
-; SDカードの初期化を実行する
-; 引数がSDのバージョンにより異なる
-  loadmem16 ZP_SDCMDPRM_VEC16,BTS_CMD41PRM
-  LDA #41|SD_STBITS
-  JSR SD_SENDCMD
-  CMP #$00
-  BEQ @INITIALIZED
-  CMP #$01          ; レスが0なら初期化完了、1秒ぐらいかかるかも
-  BNE @INITFAILED
-
-  JSR DELAY         ; 再挑戦
-  JMP @CMD55
-
-@INITFAILED:  ; 初期化失敗
-  print STR_SDINIT
-  JMP MON::HATENA
-  ; モニタに離脱
-  ;JMP MON::CTRL
-
-@INITIALIZED:
-  print STR_SDINIT
-OK:
-  LDA #'!'
-  JSR MON::PRT_CHAR_UART
-  JSR MON::PRT_LF
-  RTS
-
 MESSAGES:
-.IFDEF DEBUGBUILD
-  STR_CMD:     .BYTE $A,"CMD$",$0
-.ENDIF
-STR_IPLV:    .BYTE "IPL V.00",$0
-STR_START:   .BYTE $A,"IPL V.00",$A,$0
+STR_START:   .BYTE $A,"IPL V.01",$A,$0
 STR_SDINIT:  .BYTE "SD:Init...",$0   ; この後に!?
 STR_OLDSD:   .BYTE "SD:Old",$A,$0
 STR_NEWSD:   .BYTE "SD:>HC",$A,$0
@@ -392,92 +196,7 @@ STR_JUMPING: .BYTE $A,"Jumping...",$A,$A,$0
 ;STR_S:
 ;  .ASCIIZ "."
 STR_BOOTFILE:
-  .BYT "BOOT.INI"
-
-; SDコマンド用固定引数
-; 共通部分を重ねて圧縮している
-BTS_CMD8PRM:   ; 00 00 01 AA
-  .BYTE $AA,$01
-BTS_CMDPRM_ZERO:  ; 00 00 00 00
-  .BYTE $00
-BTS_CMD41PRM:  ; 40 00 00 00
-  .BYTE $00,$00,$00,$40
-
-SD_SENDCMD:
-  ; ZP_SDCMD_VEC16の示すところに配置されたコマンド列を送信する
-  ; Aのコマンド、ZP_SDCMDPRM_VEC16のパラメータ、SDCMD_CRCをコマンド列として送信する。
-  PHA
-
-.IFDEF DEBUGBUILD
-  ; コマンド内容表示
-  print STR_CMD
-  PLA
-  PHA
-  AND #%00111111
-  JSR PRT_BYT_S
-.ENDIF
-
-  ; コマンド開始
-  cs0low
-  JSR SPI_SETOUT
-  ; コマンド送信
-  PLA
-  JSR SPI_WRBYT
-  ; 引数送信
-  LDY #3
-@LOOP:
-  LDA (ZP_SDCMDPRM_VEC16),Y
-
-  PHY
-  ; 引数表示
-  PHA
-  JSR SPI_WRBYT
-  PLA
-.IFDEF DEBUGBUILD
-  JSR PRT_BYT_S
-.ENDIF
-  PLY
-
-  DEY
-  BPL @LOOP
-  ; CRC送信
-  LDA SDCMD_CRC
-  JSR SPI_WRBYT
-
-.IFDEF DEBUGBUILD
-  ; レス表示
-  LDA #'='
-  JSR MON::PRT_CHAR_UART
-.ENDIF
-
-  JSR SD_WAITRES
-  PHA
-
-.IFDEF DEBUGBUILD
-  JSR PRT_BYT_S
-.ENDIF
-
-  cs0high
-
-  LDX #1
-  JSR SPI_DUMMYCLK  ; ダミークロック1バイト
-  JSR SPI_SETIN
-  PLA
-  RTS
-
-SD_RDR7:
-  ; ダミークロックを入れた関係でうまく読めない
-  cs0low
-  JSR SPI_RDBYT
-  ;JSR PRT_BYT_S
-  JSR SPI_RDBYT
-  ;JSR PRT_BYT_S
-  JSR SPI_RDBYT
-  ;JSR PRT_BYT_S
-  JSR SPI_RDBYT
-  ;JSR MON::PRT_BYT
-  cs0high
-  RTS
+  .BYT "BOOT.INI",$0
 
 PRT_BYT_S:
   JSR MON::PRT_BYT
@@ -526,11 +245,7 @@ DIR_GET_BYNAME:
   STX ZP_GP0_VEC16+1
   ; カレントディレクトリを開きなおす
   JSR FILE_REOPEN
-  JSR DIR_RDSEC
-  ; エントリ番号の初期化
-  ;LDA #$FF
-  ;STA DIR::ENT_NUM
-  ;loadmem16 ZP_SDSEEK_VEC16,(SECBF512-32) ; シークポインタの初期化
+  JSR RDSEC
   JSR DIR_NEXTENT_ENT
   BRA @LOOPENT
 @LOOP:
@@ -539,9 +254,15 @@ DIR_GET_BYNAME:
   BNE @LOOPENT
   RTS
 @LOOPENT:
-  ;LDA ZP_SDSEEK_VEC16
-  ;LDX ZP_SDSEEK_VEC16+1
-  ;JSR PRT_DOTSFN
+  .IF IPLDEBUG
+    JSR MON::PRT_LF
+    LDY #11
+    LDA #0
+    STA (ZP_SDSEEK_VEC16),Y
+    LDA ZP_SDSEEK_VEC16
+    LDX ZP_SDSEEK_VEC16+1
+    JSR MON::PRT_STR
+  .ENDIF
   LDA ZP_SDSEEK_VEC16
   LDX ZP_SDSEEK_VEC16+1
   LDY #11
@@ -552,18 +273,19 @@ DIR_GET_BYNAME:
 
 DIR_NEXTENT:
   ; 次の有効な（LFNでない）エントリを拾ってくる
-  ; ZP_SDSEEK_VEC16が32bitにアライメントされ、DIR::ENT_NUMと一致するとする
+  ; ZP_SDSEEK_VEC16が32bitにアライメントされる
   ; Aには属性が入って帰る
   ; もう何もなければ$FFを返す
-  ; エントリ番号更新
+  ; 次のエントリ
 @LOOP:
-  LDA DIR::ENT_NUM
-  INC
-  STA DIR::ENT_NUM
-  AND #%00001111
-  BNE @SKP_NEXTSEC            ; セクタを読み切った
+  LDA ZP_SDSEEK_VEC16+1
+  CMP #(>SECBF512)+1
+  BNE @SKP_NEXTSEC            ; 上位桁が後半でないならセクタ読み切りの心配なし
+  LDA ZP_SDSEEK_VEC16
+  CMP #256-32
+  BNE @SKP_NEXTSEC            ; 下位桁が最終エントリならこのセクタは読み切った
   JSR FILE_NEXTSEC            ; 次のセクタに進む
-  JSR DIR_RDSEC               ; セクタを読み出す
+  JSR RDSEC                   ; セクタを読み出す
   BRA @ENT
 @SKP_NEXTSEC:
   ; シーク
@@ -574,23 +296,63 @@ DIR_NEXTENT:
   STA ZP_SDSEEK_VEC16
   STX ZP_SDSEEK_VEC16+1
 @ENT:
-DIR_NEXTENT_ENT:
+DIR_NEXTENT_ENT:              ; エントリポイント
   JSR DIR_GETENT
-  ;LDA (DIR::ENT_NAME)     ; 名前先頭
-  LDA (ZP_SDSEEK_VEC16)
+  CMP #0
   BNE @SKP_NULL               ; 0ならもうない
-  LDA #$FF
+  LDA #$FF                    ; EC:NotFound
   RTS
 @SKP_NULL:
   CMP #$E5                    ; 消去されたエントリ
   BEQ DIR_NEXTENT
-  LDA DIR::ENT_ATTR
   CMP #DIRATTR_LONGNAME
   BNE @EXT
   BRA DIR_NEXTENT
 @EXT:
   LDA DIR::ENT_ATTR
   RTS
+
+;DIR_NEXTENT:
+;  ; 次の有効な（LFNでない）エントリを拾ってくる
+;  ; ZP_SDSEEK_VEC16が32bitにアライメントされ、DIR::ENT_NUMと一致するとする
+;  ; Aには属性が入って帰る
+;  ; もう何もなければ$FFを返す
+;  ; エントリ番号更新
+;@LOOP:
+;  LDA DIR::ENT_NUM
+;  INC
+;  STA DIR::ENT_NUM
+;  AND #%00001111
+;  BNE @SKP_NEXTSEC            ; セクタを読み切った
+;  JSR FILE_NEXTSEC            ; 次のセクタに進む
+;  JSR DIR_RDSEC               ; セクタを読み出す
+;  BRA @ENT
+;@SKP_NEXTSEC:
+;  ; シーク
+;  LDA ZP_SDSEEK_VEC16
+;  LDX ZP_SDSEEK_VEC16+1
+;  LDY #32
+;  JSR S_ADD_BYT
+;  STA ZP_SDSEEK_VEC16
+;  STX ZP_SDSEEK_VEC16+1
+;@ENT:
+;DIR_NEXTENT_ENT:
+;  JSR DIR_GETENT
+;  ;LDA (DIR::ENT_NAME)     ; 名前先頭
+;  LDA (ZP_SDSEEK_VEC16)
+;  BNE @SKP_NULL               ; 0ならもうない
+;  LDA #$FF
+;  RTS
+;@SKP_NULL:
+;  CMP #$E5                    ; 消去されたエントリ
+;  BEQ DIR_NEXTENT
+;  LDA DIR::ENT_ATTR
+;  CMP #DIRATTR_LONGNAME
+;  BNE @EXT
+;  BRA DIR_NEXTENT
+;@EXT:
+;  LDA DIR::ENT_ATTR
+;  RTS
 
 DIR_GETENT:
   ; エントリを拾ってくる
@@ -602,6 +364,10 @@ DIR_GETENT:
   CMP #DIRATTR_LONGNAME
   BEQ @EXT
   ; 名前
+  LDA (ZP_SDSEEK_VEC16)
+  BEQ @EXT                      ; 0ならもうない
+  CMP #$E5                      ; 消去されたエントリならサボる
+  BEQ @EXT
   LDA ZP_SDSEEK_VEC16
   STA DIR::ENT_NAME
   LDA ZP_SDSEEK_VEC16+1
@@ -628,15 +394,28 @@ DIR_GETENT:
   INY
   LDA (ZP_SDSEEK_VEC16),Y      ; 高位
   STA DIR::ENT_HEAD+3
+  LDA #1
 @EXT:
   RTS
 
-DIR_RDSEC:
-  ; ディレクトリ操作用のバッファ位置は固定
+;DIR_RDSEC:
+;  ; ディレクトリ操作用のバッファ位置は固定
+;  loadmem16 ZP_SDSEEK_VEC16,SECBF512
+;  loadmem16 ZP_SDCMDPRM_VEC16,(FILE::REAL_SEC)
+;  JSR SD::RDSEC
+;  DEC ZP_SDSEEK_VEC16+1
+;  RTS
+
+RDSEC:
   loadmem16 ZP_SDSEEK_VEC16,SECBF512
-  loadmem16 ZP_SDCMDPRM_VEC16,(FILE::REAL_SEC)
-  JSR SD_RDSEC
+  loadmem16 ZP_SDCMDPRM_VEC16,(FILE::REAL_SEC)  ; NOTE:FWK_REAL_SECを読んで監視するBP
+  JSR SD::RDSEC
+  SEC
+  BNE @ERR
+@SKP_E:
   DEC ZP_SDSEEK_VEC16+1
+  CLC
+@ERR:
   RTS
 
 FILE_OPEN:
@@ -708,18 +487,17 @@ CK_ENDSEC_FLG:
   STA FILE::ENDSEC_FLG
   RTS
 
-
 FILE_RDWORD:
   ; ファイルからデータを2バイト読み出してAXに
   ; TODO ファイル終端の検出
   LDA DRV::SEC_RESWORD
   BNE @SKP_RDCMD          ; CMD17が終わっているので新たにコマンドを送る
   loadmem16 ZP_SDCMDPRM_VEC16,FILE::REAL_SEC
-  JSR SD_RDINIT
+  JSR SD::RDINIT
 @SKP_RDCMD:
-  JSR SPI_RDBYT
+  JSR SPI::RDBYT
   PHA
-  JSR SPI_RDBYT
+  JSR SPI::RDBYT
   TAX
   PLA
   DEC DRV::SEC_RESWORD
@@ -735,8 +513,8 @@ FILE_RDWORD:
 
 FILE_THROWSEC:
   ; RDBYTを抜ける
-  JSR SPI_RDBYT
-  JSR SPI_RDBYT
+  JSR SPI::RDBYT
+  JSR SPI::RDBYT
   DEC DRV::SEC_RESWORD
   BNE FILE_THROWSEC
   ; コマンド終了
@@ -769,7 +547,7 @@ FILE_DLFULL:
   BEQ @ENDSEC           ; $1であれば最終セクタ
 @LOOP:
   loadmem16 ZP_SDCMDPRM_VEC16,FILE::REAL_SEC
-  JSR SD_RDSEC
+  JSR SD::RDSEC
   INC ZP_SDSEEK_VEC16+1
   JSR FILE_NEXTSEC
   CMP #2
@@ -781,13 +559,13 @@ FILE_DLFULL:
   LDA #$80
   STA DRV::SEC_RESWORD
   loadmem16 ZP_SDCMDPRM_VEC16,FILE::REAL_SEC
-  JSR SD_RDINIT
+  JSR SD::RDINIT
   LDA FILE::RES_SIZ+1
   BIT #%00000001
   BEQ @SKP_PG
   ; ページ丸ごと
   STZ DRV::SEC_RESWORD
-  JSR RDPAGE
+  JSR SD::RDPAGE
   INC ZP_SDSEEK_VEC16+1
   ; 1ページ分減算
   loadmem8l ZP_LDST0_VEC16,FILE::RES_SIZ+1
@@ -1086,71 +864,6 @@ DELAY:
 @LOOP:
   DEY
   BNE @LOOP
-  DEX
-  BNE @LOOP
-  RTS
-
-SD_WAITRES:
-  ; --- SDカードが負数を返すのを待つ
-  ; --- 負数でエラー
-  JSR SPI_SETIN
-  LDX #8
-@RETRY:
-  JSR SPI_RDBYT ; なぜか、直前に送ったCRCが帰ってきてしまう
-.IFDEF DEBUGBUILD
-  PHA
-  JSR PRT_BYT_S
-  PLA
-.ENDIF
-  BPL @RETURN   ; bit7が0ならレス始まり
-  DEX
-  BNE @RETRY
-@RETURN:
-  ;STA SD_CMD_DAT ; ?
-  RTS
-
-SPI_SETIN:
-  ; --- SPIシフトレジスタを入力（MISO）モードにする
-  LDA VIA::ACR      ; シフトレジスタ設定の変更
-  AND #%11100011    ; bit 2-4がシフトレジスタの設定なのでそれをマスク
-  ORA #%00001000    ; PHI2制御下インプット
-  STA VIA::ACR
-  LDA VIA::PORTB
-  ORA #(VIA::SPI_INOUT) ; INOUT=1で入力モード
-  STA VIA::PORTB
-  RTS
-
-SPI_SETOUT:
-  ; --- SPIシフトレジスタを出力（MOSI）モードにする
-  LDA VIA::ACR      ; シフトレジスタ設定の変更
-  AND #%11100011    ; bit 2-4がシフトレジスタの設定なのでそれをマスク
-  ORA #%00011000    ; PHI2制御下出力
-  STA VIA::ACR
-  LDA VIA::PORTB
-  AND #<~(VIA::SPI_INOUT)
-  STA VIA::PORTB
-  RTS
-
-SPI_WRBYT:
-  ; --- Aを送信
-  STA VIA::SR
-@WAIT:
-  LDA VIA::IFR
-  AND #%00000100      ; シフトレジスタ割り込みを確認
-  BEQ @WAIT
-  RTS
-
-SPI_RDBYT:
-  ; --- AにSPIで受信したデータを格納
-  spi_rdbyt
-  RTS
-
-SPI_DUMMYCLK:
-  ; --- X回のダミークロックを送信する
-  JSR SPI_SETOUT
-@LOOP:
-  LDA #$FF
-  JSR SPI_WRBYT
   DEX
   BNE @LOOP
   RTS
