@@ -32,25 +32,14 @@ IPL_RESET:
   JSR SD::INIT
   JSR DRV_INIT
 
+
 BOOT:
-  ; ルートディレクトリを開く
-  loadreg16 DRV::BPB_ROOTCLUS
-  JSR FILE_OPEN
-  ; BOOT.INIを探す
-  print STR_SCFILE
-  print STR_BOOTFILE
-  loadreg16 STR_BOOTFILE
-  JSR M_SFN_DOT2RAW_AXS
-  JSR ETM_DIR_OPEN_BYNAME
-  ; BOOT.INIを読む
-  print STR_BTMOD
-  JSR FILE_RDWORD           ; HEX1バイト:起動挙動 00=SDブート,01=モニタ
-  JSR BLDPRTBYT             ; 文字列出力先の指定とかもできるかも？
-  BEQ @SKPCTRL
-  ; セクタを閉じる
+  JSR OPENINI_RDMODE        ; BOOT.INIを開いて先頭1バイトを読み取って表示
+  BEQ RD_BOOT_LOAD_POINT    ; 00ならそのままロード
+  ; カードブート以外が指定されていたので、セクタを閉じてモニタに跳ぶ
   JSR FILE_THROWSEC
   JMP MON::CTRL
-@SKPCTRL:
+RD_BOOT_LOAD_POINT:         ; OPENINI_RDMODEしてからここに飛ぶと、起動指定バイトを無視してブートできる
   JSR FILE_RDWORD           ; 改行と何か一つ読み飛ばす
   ; ブートローダ開始位置を決定する
   print STR_BTLOAD
@@ -116,6 +105,22 @@ ETM_DIR_OPEN_BYNAME:
   JMP RETRY
 @SKP_HATENA:
   JSR SD::OK
+  RTS
+
+OPENINI_RDMODE:
+  ; ルートディレクトリを開く
+  loadreg16 DRV::BPB_ROOTCLUS
+  JSR FILE_OPEN
+  ; BOOT.INIを探す
+  print STR_SCFILE
+  print STR_BOOTFILE
+  loadreg16 STR_BOOTFILE
+  JSR M_SFN_DOT2RAW_AXS
+  JSR ETM_DIR_OPEN_BYNAME
+  ; BOOT.INIを読む
+  print STR_BTMOD
+  JSR FILE_RDWORD           ; HEX1バイト:起動挙動 00=SDブート,01=モニタ
+  JSR BLDPRTBYT             ; 文字列出力先の指定とかもできるかも？
   RTS
 
 DRV_INIT:
@@ -193,7 +198,7 @@ RETRY:
   JMP IPL_RESET
 
 MESSAGES:
-STR_START:   .BYTE $A,"IPL V.01",$A,$0
+STR_START:   .BYTE $A,"IPL V.02",$A,$0
 STR_SDINIT:  .BYTE "SD:Init...",$0   ; この後に!?
 STR_OLDSD:   .BYTE "SD:Old",$A,$0
 STR_NEWSD:   .BYTE "SD:>HC",$A,$0

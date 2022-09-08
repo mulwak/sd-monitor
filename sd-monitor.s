@@ -122,6 +122,11 @@ CTRL:
   JSR PRT_STR
   JSR INPUT_CHAR_UART
   JSR PRT_S
+  CMP #'B' ; 強制カードブート
+  BNE @SKP_B
+  JSR OPENINI_RDMODE
+  JMP RD_BOOT_LOAD_POINT
+@SKP_B:
   CMP #'S' ; リセットボタン押すのめんどいとき用
   BEQ RESET
   CMP #'L'
