@@ -1,4 +1,4 @@
-;DEBUGBUILD = 1
+SDDEBUG = 1
 ; SDカードドライバのSDカード固有部分
 .INCLUDE "FXT65.inc"
 
@@ -165,10 +165,10 @@ WAITRES:
   LDX #8
 @RETRY:
   JSR SPI::RDBYT ; なぜか、直前に送ったCRCが帰ってきてしまう
-.IFDEF DEBUGBUILD
+.IFDEF SDDEBUG
   PHA
   LDA #'w'
-  JSR FUNC_CON_OUT_CHR
+  JSR MON::PRT_CHAR_UART
   PLA
   PHA
   JSR PRT_BYT_S
@@ -185,10 +185,10 @@ SENDCMD:
   ; ZP_SDCMD_VEC16の示すところに配置されたコマンド列を送信する
   ; Aのコマンド、ZP_SDCMDPRM_VEC16のパラメータ、SDCMD_CRCをコマンド列として送信する。
   PHA
-  .IFDEF DEBUGBUILD
+  .IFDEF SDDEBUG
     ; コマンド内容表示
-    loadAY16 STR_CMD
-    JSR FUNC_CON_OUT_STR
+    loadreg16 STR_CMD
+    JSR MON::PRT_STR
     PLA
     PHA
     AND #%00111111
@@ -206,7 +206,7 @@ SENDCMD:
   LDA (ZP_SDCMDPRM_VEC16),Y
   PHY
   ; 引数表示
-  .IFDEF DEBUGBUILD
+  .IFDEF SDDEBUG
     PHA
     JSR PRT_BYT_S
     PLA
@@ -217,23 +217,23 @@ SENDCMD:
   BPL @LOOP
   ; CRC送信
   LDA SDCMD_CRC
-  .IFDEF DEBUGBUILD
+  .IFDEF SDDEBUG
     PHA
     JSR PRT_BYT_S     ; CRC表示
     PLA
   .ENDIF
   JSR SPI::WRBYT
-  .IFDEF DEBUGBUILD
+  .IFDEF SDDEBUG
     ; レス表示
     LDA #'='
-    JSR FUNC_CON_OUT_CHR
+    JSR MON::PRT_CHAR_UART
   .ENDIF
   JSR SD::WAITRES
   PHA
-  .IFDEF DEBUGBUILD
+  .IFDEF SDDEBUG
     JSR PRT_BYT_S
     LDA #$A
-    JSR FUNC_CON_OUT_CHR
+    JSR MON::PRT_CHAR_UART
   .ENDIF
   cs0high
   LDX #1
@@ -265,46 +265,49 @@ RDR7:
   ;JSR MON::PRT_BYT
   cs0high
   RTS
+;
+;.IFDEF SDDEBUG
+;  PRT_BYT_S:  ;デバッグ用
+;    PHA
+;    LDA #' '
+;    JSR MON::PRT_CHAR_UART
+;    PLA
+;    JSR BYT2ASC
+;    PHY
+;    JSR @CALL
+;    PLA
+;  @CALL:
+;    JSR MON::PRT_CHAR_UART
+;    RTS
+;
+;  BYT2ASC:
+;    ; Aで与えられたバイト値をASCII値AYにする
+;    ; Aから先に表示すると良い
+;    PHA           ; 下位のために保存
+;    AND #$0F
+;    JSR NIB2ASC
+;    TAY
+;    PLA
+;    LSR           ; 右シフトx4で上位を下位に持ってくる
+;    LSR
+;    LSR
+;    LSR
+;    JSR NIB2ASC
+;    RTS
+;
+;  NIB2ASC:
+;    ; #$0?をアスキー一文字にする
+;    ORA #$30
+;    CMP #$3A
+;    BCC @SKP_ADC  ; Aが$3Aより小さいか等しければ分岐
+;    ADC #$06
+;  @SKP_ADC:
+;    RTS
+;
+;  STR_CMD:
+;    .ASCIIZ "CMD"
+;.ENDIF
+;
 
-.IFDEF DEBUGBUILD
-  PRT_BYT_S:  ;デバッグ用
-    PHA
-    LDA #' '
-    JSR FUNC_CON_OUT_CHR
-    PLA
-    JSR BYT2ASC
-    PHY
-    JSR @CALL
-    PLA
-  @CALL:
-    JSR FUNC_CON_OUT_CHR
-    RTS
-
-  BYT2ASC:
-    ; Aで与えられたバイト値をASCII値AYにする
-    ; Aから先に表示すると良い
-    PHA           ; 下位のために保存
-    AND #$0F
-    JSR NIB2ASC
-    TAY
-    PLA
-    LSR           ; 右シフトx4で上位を下位に持ってくる
-    LSR
-    LSR
-    LSR
-    JSR NIB2ASC
-    RTS
-
-  NIB2ASC:
-    ; #$0?をアスキー一文字にする
-    ORA #$30
-    CMP #$3A
-    BCC @SKP_ADC  ; Aが$3Aより小さいか等しければ分岐
-    ADC #$06
-  @SKP_ADC:
-    RTS
-
-  STR_CMD:
-    .ASCIIZ "CMD"
-.ENDIF
+STR_CMD:    .BYTE $A,"CMD:",$0
 
