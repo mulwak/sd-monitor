@@ -265,49 +265,6 @@ RDR7:
   ;JSR MON::PRT_BYT
   cs0high
   RTS
-;
-;.IFDEF SDDEBUG
-;  PRT_BYT_S:  ;デバッグ用
-;    PHA
-;    LDA #' '
-;    JSR MON::PRT_CHAR_UART
-;    PLA
-;    JSR BYT2ASC
-;    PHY
-;    JSR @CALL
-;    PLA
-;  @CALL:
-;    JSR MON::PRT_CHAR_UART
-;    RTS
-;
-;  BYT2ASC:
-;    ; Aで与えられたバイト値をASCII値AYにする
-;    ; Aから先に表示すると良い
-;    PHA           ; 下位のために保存
-;    AND #$0F
-;    JSR NIB2ASC
-;    TAY
-;    PLA
-;    LSR           ; 右シフトx4で上位を下位に持ってくる
-;    LSR
-;    LSR
-;    LSR
-;    JSR NIB2ASC
-;    RTS
-;
-;  NIB2ASC:
-;    ; #$0?をアスキー一文字にする
-;    ORA #$30
-;    CMP #$3A
-;    BCC @SKP_ADC  ; Aが$3Aより小さいか等しければ分岐
-;    ADC #$06
-;  @SKP_ADC:
-;    RTS
-;
-;  STR_CMD:
-;    .ASCIIZ "CMD"
-;.ENDIF
-;
 
-STR_CMD:    .BYTE $A,"CMD:",$0
+STR_CMD:    .BYTE "CMD",$0
 
