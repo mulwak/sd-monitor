@@ -126,7 +126,9 @@ OPENINI_RDMODE:
   RTS
 
 DRV_INIT:
-  ; MBRを読む
+; ---------------------------------------------------------------
+;   MBRを読む
+; ---------------------------------------------------------------
   loadmem16 ZP_SDCMDPRM_VEC16,SD::BTS_CMDPRM_ZERO
   loadmem16 ZP_SDSEEK_VEC16,SECBF512
   JSR SD::RDSEC
@@ -143,39 +145,41 @@ DRV_INIT:
   ; ソースを上位のみ設定
   LDA #(>SECBF512)+1
   STA ZP_LSRC0_VEC16+1
-  ; DRV::PT_LBAOFS取得
+  ; ---------------------------------------------------------------
+  ;   DRV::PT_LBAOFS取得
   loadreg16 (DRV::PT_LBAOFS)
   JSR AX_DST
   LDA #(OFS_MBR_PARTBL-256+OFS_PT_LBAOFS)
   JSR L_LD_AS
-  ; BPBを読む
+; ---------------------------------------------------------------
+;   BPBを読む
+; ---------------------------------------------------------------
   loadmem16 ZP_SDCMDPRM_VEC16,(DRV::PT_LBAOFS)
   DEC ZP_SDSEEK_VEC16+1
   JSR SD::RDSEC
   DEC ZP_SDSEEK_VEC16+1
-  ; DRV::SEVPERCLUS取得
+  ; ---------------------------------------------------------------
+  ;   DRV::SEVPERCLUS取得
   LDY #(OFS_BPB_SECPERCLUS)
   LDA (ZP_SDSEEK_VEC16),Y       ; 1クラスタのセクタ数
   STA DRV::BPB_SECPERCLUS
-  ; --- DRV::FATSTART作成
-  ; PT_LBAOFSを下地としてロード
-  loadreg16 (DRV::FATSTART)
-  JSR AX_DST
+  ; ---------------------------------------------------------------
+  ;   DRV::FATSTART作成
+  ;     {FATSTART=PT_LBAOFS+予約領域サイズBPB_RSVDSECCNT}
+  loadreg16 (DRV::FATSTART)     ; PT_LBAOFSを下地としてロード
+  JSR AX_DST                    ;   {FATSTART=PT_LBAOFS}
   loadreg16 (DRV::PT_LBAOFS)
   JSR L_LD_AXS
-  ; 予約領域の大きさのあと（NumFATsとルートディレクトリの大きさで、不要）をゼロにして、
-  ; 予約領域の大きさを32bitの値にする
-  LDA #0
-  LDY #(OFS_BPB_RSVDSECCNT+2)
+  LDA #0                        ; 予約領域の大きさのあと（NumFATsとルートディレクトリの大きさで、不要）
+  LDY #(OFS_BPB_RSVDSECCNT+2)   ;   をゼロにして、予約領域の大きさを32bitの値にする
   STA (ZP_SDSEEK_VEC16),Y
   INY
   STA (ZP_SDSEEK_VEC16),Y
-  ; 予約領域を加算
-  loadreg16 (SECBF512+OFS_BPB_RSVDSECCNT)
+  loadreg16 (SECBF512+OFS_BPB_RSVDSECCNT) ; 加算
   JSR L_ADD_AXS
-  ; --- DRV::DATSTART作成
-  ; FATの大きさをロード
-  loadreg16 (DRV::DATSTART)
+  ; ---------------------------------------------------------------
+  ;   DRV::DATSTART作成
+  loadreg16 (DRV::DATSTART)   ; FATの大きさをロード
   JSR AX_DST
   loadreg16 (SECBF512+OFS_BPB_FATSZ32)
   JSR L_LD_AXS
@@ -183,7 +187,8 @@ DRV_INIT:
   ; FATSTARTを加算
   loadreg16 (DRV::FATSTART)
   JSR L_ADD_AXS
-  ; --- ルートディレクトリクラスタ番号取得（どうせDAT先頭だけど…
+  ; ---------------------------------------------------------------
+  ;   ルートディレクトリクラスタ番号取得（どうせDAT先頭だけど…
   loadreg16 (DRV::BPB_ROOTCLUS)
   JSR AX_DST
   loadreg16 (SECBF512+OFS_BPB_ROOTCLUS)
